@@ -19,6 +19,18 @@ export interface ReportTaskResult {
   report_id: string
 }
 
+interface ReportTask {
+  taskId: string
+  reportData: GenerateReportData
+  userId: string
+  ipAddress?: string
+  userAgent?: string
+}
+
+// In-memory queue for development environment
+const reportQueue: ReportTask[] = []
+let isProcessing = false
+
 export class ReportService {
   async generateReport(
     reportData: GenerateReportData,
@@ -50,12 +62,77 @@ export class ReportService {
       user_agent: userAgent,
     })
 
-    // TODO: Add report to message queue for processing
-    // This would typically involve adding the task to a queue like RabbitMQ or AWS SQS
+    // Add task to queue and trigger processing
+    reportQueue.push({
+      taskId,
+      reportData,
+      userId,
+      ipAddress,
+      userAgent,
+    })
+
+    this.triggerReportProcessing()
 
     return {
       task_id: taskId,
       report_id: report.id,
+    }
+  }
+
+  private triggerReportProcessing(): void {
+    if (isProcessing || reportQueue.length === 0) return
+
+    isProcessing = true
+    const task = reportQueue.shift()!
+    this.processReport(task)
+  }
+
+  private async processReport(task: ReportTask): Promise<void> {
+    try {
+      // Simulate report generation work
+      await new Promise((resolve) => setTimeout(resolve, 10000 + Math.random() * 5000)) // 10-15 seconds
+
+      // Update report status to completed
+      await dbUpdateReportStatus(task.taskId, "completed", `/reports/generated/${task.taskId}.pdf`, undefined)
+
+      // Create audit log for completion
+      await createAuditLog({
+        user_id: task.userId,
+        action: "REPORT_GENERATION_COMPLETED",
+        details: {
+          task_id: task.taskId,
+          title: task.reportData.title,
+          type: task.reportData.type,
+        },
+        ip_address: task.ipAddress,
+        user_agent: task.userAgent,
+      })
+    } catch (error) {
+      // Update report status to failed
+      await dbUpdateReportStatus(
+        task.taskId,
+        "failed",
+        undefined,
+        error instanceof Error ? error.message : "Unknown error occurred",
+      )
+
+      // Create audit log for failure
+      await createAuditLog({
+        user_id: task.userId,
+        action: "REPORT_GENERATION_FAILED",
+        details: {
+          task_id: task.taskId,
+          title: task.reportData.title,
+          type: task.reportData.type,
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+        ip_address: task.ipAddress,
+        user_agent: task.userAgent,
+      })
+    } finally {
+      isProcessing = false
+      // Process next item in queue if any
+      this.triggerReportProcessing()
     }
   }
 

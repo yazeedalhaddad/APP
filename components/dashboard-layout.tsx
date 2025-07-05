@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ManagementDashboard } from "@/components/dashboards/management-dashboard"
@@ -13,55 +13,63 @@ import { ReportsInterface } from "@/components/reports-interface"
 import { UserManagement } from "@/components/user-management"
 import { AuditLog } from "@/components/audit-log"
 import { Button } from "@/components/ui/button"
-import { LogOut, Bell } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-// Import the new component
+import { LogOut, Bell } from "lucide-react"
 import { VersionControlStoryboard } from "@/components/version-control-storyboard"
+import { useAppStore } from "@/stores/app-store"
 
-interface User {
-  id: string
-  name: string
-  email: string
-  role: "management" | "production" | "lab" | "admin"
-  department: string
-}
-
-interface DashboardLayoutProps {
-  user: User
-  onLogout: () => void
-}
-
-export function DashboardLayout({ user, onLogout }: DashboardLayoutProps) {
+export function DashboardLayout() {
   const [currentView, setCurrentView] = useState("dashboard")
-  const [selectedDocument, setSelectedDocument] = useState<any>(null)
+  const { user, activeDocument, logout, selectDocument } = useAppStore()
+
+  // Fetch initial data when component mounts
+  useEffect(() => {
+    if (user) {
+      // Fetch documents and other initial data based on user role
+      const { fetchDocuments, fetchDrafts, fetchMergeRequests } = useAppStore.getState()
+      fetchDocuments()
+      fetchDrafts()
+      if (user.role === "management" || user.role === "admin") {
+        fetchMergeRequests()
+      }
+    }
+  }, [user])
+
+  const handleLogout = () => {
+    logout()
+  }
+
+  const handleDocumentSelect = (document: any) => {
+    selectDocument(document.id)
+  }
 
   const renderMainContent = () => {
-    if (selectedDocument) {
-      return <DocumentViewer document={selectedDocument} user={user} onClose={() => setSelectedDocument(null)} />
+    if (activeDocument) {
+      return <DocumentViewer onClose={() => useAppStore.getState().selectDocument("")} />
     }
 
     switch (currentView) {
       case "dashboard":
+        if (!user) return null
         switch (user.role) {
           case "management":
-            return <ManagementDashboard user={user} onDocumentSelect={setSelectedDocument} />
+            return <ManagementDashboard onDocumentSelect={handleDocumentSelect} />
           case "production":
-            return <ProductionDashboard user={user} onDocumentSelect={setSelectedDocument} />
+            return <ProductionDashboard onDocumentSelect={handleDocumentSelect} />
           case "lab":
-            return <LabDashboard user={user} onDocumentSelect={setSelectedDocument} />
+            return <LabDashboard onDocumentSelect={handleDocumentSelect} />
           case "admin":
-            return <AdminDashboard user={user} />
+            return <AdminDashboard />
         }
         break
       case "search":
-        return <SearchInterface user={user} onDocumentSelect={setSelectedDocument} />
+        return <SearchInterface onDocumentSelect={handleDocumentSelect} />
       case "reports":
-        return <ReportsInterface user={user} />
+        return <ReportsInterface />
       case "users":
-        return <UserManagement user={user} />
+        return <UserManagement />
       case "audit":
-        return <AuditLog user={user} />
-      // Add to the renderMainContent function
+        return <AuditLog />
       case "version-control":
         return <VersionControlStoryboard />
       default:
@@ -69,10 +77,12 @@ export function DashboardLayout({ user, onLogout }: DashboardLayoutProps) {
     }
   }
 
+  if (!user) return null
+
   return (
     <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen w-full bg-slate-50">
-        <AppSidebar user={user} currentView={currentView} onViewChange={setCurrentView} />
+        <AppSidebar currentView={currentView} onViewChange={setCurrentView} />
         <SidebarInset className="flex-1">
           {/* Header */}
           <header className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
@@ -94,7 +104,7 @@ export function DashboardLayout({ user, onLogout }: DashboardLayoutProps) {
                   <Bell className="h-4 w-4" />
                   <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs bg-orange-500">3</Badge>
                 </Button>
-                <Button variant="ghost" size="sm" onClick={onLogout}>
+                <Button variant="ghost" size="sm" onClick={handleLogout}>
                   <LogOut className="h-4 w-4 mr-2" />
                   Sign Out
                 </Button>
@@ -109,28 +119,3 @@ export function DashboardLayout({ user, onLogout }: DashboardLayoutProps) {
     </SidebarProvider>
   )
 }
-
-import { LayoutDashboard, Search, FileText, Users, Activity, Settings, GitBranch } from "lucide-react"
-
-// Update the sidebar menu items to include the storyboard
-const getMenuItems = (user: User) => {
-  const baseItems = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "search", label: "Search Documents", icon: Search },
-    { id: "reports", label: "Reports", icon: FileText },
-    { id: "version-control", label: "Version Control Demo", icon: GitBranch },
-  ]
-
-  if (user.role === "admin") {
-    return [
-      ...baseItems,
-      { id: "users", label: "User Management", icon: Users },
-      { id: "audit", label: "Audit Log", icon: Activity },
-      { id: "settings", label: "System Settings", icon: Settings },
-    ]
-  }
-
-  return baseItems
-}
-
-export { getMenuItems }

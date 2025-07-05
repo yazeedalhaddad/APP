@@ -1,104 +1,105 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Building2, Shield } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Building2, AlertCircle } from "lucide-react"
+import { useAppStore } from "@/stores/app-store"
 
-interface LoginScreenProps {
-  onLogin: (user: {
-    id: string
-    name: string
-    email: string
-    role: "management" | "production" | "lab" | "admin"
-    department: string
-  }) => void
-}
+export function LoginScreen() {
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const { login, isLoading, error, clearError } = useAppStore()
 
-export function LoginScreen({ onLogin }: LoginScreenProps) {
-  const [selectedRole, setSelectedRole] = useState<string>("")
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    clearError()
 
-  const handleLogin = () => {
-    const roleMap = {
-      management: { name: "Dr. Sarah Johnson", email: "sarah.johnson@medprep.com", department: "Management" },
-      production: { name: "Mike Chen", email: "mike.chen@medprep.com", department: "Production" },
-      lab: { name: "Dr. Emily Rodriguez", email: "emily.rodriguez@medprep.com", department: "Laboratory" },
-      admin: { name: "System Administrator", email: "admin@medprep.com", department: "IT" },
-    }
-
-    if (selectedRole && roleMap[selectedRole as keyof typeof roleMap]) {
-      const userData = roleMap[selectedRole as keyof typeof roleMap]
-      onLogin({
-        id: `user_${selectedRole}`,
-        role: selectedRole as any,
-        ...userData,
-      })
+    try {
+      await login({ email, password })
+    } catch (error) {
+      // Error is handled in the store
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
-        {/* Company Header */}
-        <div className="text-center space-y-2">
-          <div className="flex items-center justify-center space-x-2">
-            <Building2 className="h-8 w-8 text-blue-600" />
-            <h1 className="text-2xl font-bold text-slate-800">MedPrep Systems</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="text-center space-y-4">
+          <div className="mx-auto w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center">
+            <Building2 className="h-8 w-8 text-white" />
           </div>
-          <p className="text-slate-600">National Company for Medical Preparations</p>
-        </div>
+          <div>
+            <CardTitle className="text-2xl font-bold text-slate-800">Document Workflow</CardTitle>
+            <CardDescription className="text-slate-600">
+              Sign in to access your pharmaceutical document management system
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-        <Card className="shadow-lg border-0">
-          <CardHeader className="space-y-1">
-            <div className="flex items-center space-x-2">
-              <Shield className="h-5 w-5 text-blue-600" />
-              <CardTitle className="text-xl">Titanium Document Workflow</CardTitle>
-            </div>
-            <CardDescription>Secure document management system for pharmaceutical operations</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
-              <Input id="email" type="email" placeholder="Enter your email" className="h-11" />
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" placeholder="Enter your password" className="h-11" />
+              <Input
+                id="password"
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={isLoading}
+              />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="role">Demo Role Selection</Label>
-              <Select value={selectedRole} onValueChange={setSelectedRole}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Select a role to demo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="management">Management Director</SelectItem>
-                  <SelectItem value="production">Production Manager</SelectItem>
-                  <SelectItem value="lab">Lab Technician</SelectItem>
-                  <SelectItem value="admin">System Administrator</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button
-              onClick={handleLogin}
-              className="w-full h-11 bg-blue-600 hover:bg-blue-700"
-              disabled={!selectedRole}
-            >
-              Sign In
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Signing in..." : "Sign In"}
             </Button>
+          </form>
 
-            <div className="text-xs text-slate-500 text-center">
-              This is a demo system. Select a role above to explore different user experiences.
+          <div className="mt-6 p-4 bg-slate-50 rounded-lg">
+            <p className="text-sm text-slate-600 mb-2">Demo Accounts:</p>
+            <div className="space-y-1 text-xs text-slate-500">
+              <p>
+                <strong>Admin:</strong> admin@medprep.com / admin123
+              </p>
+              <p>
+                <strong>Management:</strong> sarah.johnson@medprep.com / password123
+              </p>
+              <p>
+                <strong>Lab:</strong> emily.rodriguez@medprep.com / password123
+              </p>
+              <p>
+                <strong>Production:</strong> mike.chen@medprep.com / password123
+              </p>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

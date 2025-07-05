@@ -8,8 +8,8 @@ export async function validateBody<T>(request: NextRequest, schema: z.ZodSchema<
     return schema.parse(body)
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const message = error.errors.map((err) => `${err.path.join(".")}: ${err.message}`).join(", ")
-      throw new ValidationError(`Validation failed: ${message}`)
+      const errorMessages = error.errors.map((err) => `${err.path.join(".")}: ${err.message}`).join(", ")
+      throw new ValidationError(`Validation failed: ${errorMessages}`)
     }
     throw new ValidationError("Invalid request body")
   }
@@ -18,12 +18,12 @@ export async function validateBody<T>(request: NextRequest, schema: z.ZodSchema<
 export function validateQuery<T>(request: NextRequest, schema: z.ZodSchema<T>): T {
   try {
     const { searchParams } = new URL(request.url)
-    const query = Object.fromEntries(searchParams.entries())
-    return schema.parse(query)
+    const queryObject = Object.fromEntries(searchParams.entries())
+    return schema.parse(queryObject)
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const message = error.errors.map((err) => `${err.path.join(".")}: ${err.message}`).join(", ")
-      throw new ValidationError(`Query validation failed: ${message}`)
+      const errorMessages = error.errors.map((err) => `${err.path.join(".")}: ${err.message}`).join(", ")
+      throw new ValidationError(`Query validation failed: ${errorMessages}`)
     }
     throw new ValidationError("Invalid query parameters")
   }

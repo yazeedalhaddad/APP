@@ -3,38 +3,37 @@
 import {
   Sidebar,
   SidebarContent,
-  SidebarHeader,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
 } from "@/components/ui/sidebar"
-import { LayoutDashboard, Search, FileText, Users, Settings, Shield, Building2, Activity } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: "management" | "production" | "lab" | "admin"
-  department: string
-}
+import { Badge } from "@/components/ui/badge"
+import { LayoutDashboard, Search, FileText, Users, Activity, Settings, GitBranch, Building2 } from "lucide-react"
+import { useAppStore } from "@/stores/app-store"
 
 interface AppSidebarProps {
-  user: User
   currentView: string
   onViewChange: (view: string) => void
 }
 
-export function AppSidebar({ user, currentView, onViewChange }: AppSidebarProps) {
+export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
+  const { user } = useAppStore()
+
+  if (!user) return null
+
   const getMenuItems = () => {
     const baseItems = [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
       { id: "search", label: "Search Documents", icon: Search },
       { id: "reports", label: "Reports", icon: FileText },
+      { id: "version-control", label: "Version Control Demo", icon: GitBranch },
     ]
 
     if (user.role === "admin") {
@@ -49,34 +48,32 @@ export function AppSidebar({ user, currentView, onViewChange }: AppSidebarProps)
     return baseItems
   }
 
+  const menuItems = getMenuItems()
+
   return (
-    <Sidebar className="border-r border-slate-200">
-      <SidebarHeader className="border-b border-slate-200 p-4">
+    <Sidebar>
+      <SidebarHeader className="border-b p-4">
         <div className="flex items-center space-x-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
-            <Building2 className="h-6 w-6 text-white" />
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <Building2 className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-slate-800">Titanium Workflow</h2>
-            <p className="text-xs text-slate-600">Document Management</p>
+            <h2 className="font-semibold text-slate-800">MedPrep Systems</h2>
+            <p className="text-xs text-slate-600">Document Workflow</p>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="p-4">
+      <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-            Navigation
-          </SidebarGroupLabel>
+          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {getMenuItems().map((item) => (
+              {menuItems.map((item) => (
                 <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton asChild isActive={currentView === item.id} className="w-full justify-start">
-                    <button onClick={() => onViewChange(item.id)}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.label}</span>
-                    </button>
+                  <SidebarMenuButton isActive={currentView === item.id} onClick={() => onViewChange(item.id)}>
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.label}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -85,11 +82,11 @@ export function AppSidebar({ user, currentView, onViewChange }: AppSidebarProps)
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-slate-200 p-4">
+      <SidebarFooter className="border-t p-4">
         <div className="flex items-center space-x-3">
           <Avatar className="h-8 w-8">
-            <AvatarImage src={`/placeholder.svg?height=32&width=32`} />
-            <AvatarFallback className="bg-blue-100 text-blue-600 text-xs">
+            <AvatarImage src="/placeholder-user.jpg" alt={user.name} />
+            <AvatarFallback>
               {user.name
                 .split(" ")
                 .map((n) => n[0])
@@ -98,13 +95,17 @@ export function AppSidebar({ user, currentView, onViewChange }: AppSidebarProps)
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-slate-800 truncate">{user.name}</p>
-            <div className="flex items-center space-x-1">
-              <Shield className="h-3 w-3 text-slate-400" />
-              <p className="text-xs text-slate-600 capitalize">{user.role}</p>
+            <div className="flex items-center space-x-2">
+              <Badge variant="secondary" className="text-xs">
+                {user.role}
+              </Badge>
+              <p className="text-xs text-slate-600 truncate">{user.department}</p>
             </div>
           </div>
         </div>
       </SidebarFooter>
+
+      <SidebarRail />
     </Sidebar>
   )
 }

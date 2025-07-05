@@ -500,7 +500,7 @@ export async function updateReportStatus(taskId: string, status: string, filePat
   return result[0] || null
 }
 
-// Dashboard metrics
+// Optimized dashboard metrics with SQL calculations
 export async function getDashboardMetrics({
   department,
   limit = 100,
@@ -510,22 +510,63 @@ export async function getDashboardMetrics({
   limit?: number
   offset?: number
 } = {}) {
-  let query = sql`
-    SELECT * 
-    FROM dashboard_metrics 
-    WHERE 1 = 1
+  // Get real-time calculated metrics using SQL aggregations
+  const metricsQuery = sql`
+    WITH document_stats AS (
+      SELECT 
+        COUNT(*) as total_documents,
+        COUNT(CASE WHEN d.created_at >= NOW() - INTERVAL '30 days' THEN 1 END) as recent_documents
+      FROM documents d
+      ${department ? sql`JOIN users u ON d.owner_id = u.id WHERE u.department = ${department}` : sql`WHERE 1=1`}
+    ),
+    draft_stats AS (
+      SELECT 
+        COUNT(*) as total_drafts,
+        COUNT(CASE WHEN dr.status = 'pending' THEN 1 END) as pending_drafts
+      FROM drafts dr
+      ${department ? sql`JOIN users u ON dr.creator_id = u.id WHERE u.department = ${department}` : sql`WHERE 1=1`}
+    ),
+    merge_request_stats AS (
+      SELECT 
+        COUNT(CASE WHEN mr.status = 'pending' THEN 1 END) as pending_approvals
+      FROM merge_requests mr
+      JOIN drafts dr ON mr.draft_id = dr.id
+      ${department ? sql`JOIN users u ON dr.creator_id = u.id WHERE u.department = ${department}` : sql`WHERE 1=1`}
+    ),
+    user_stats AS (
+      SELECT 
+        COUNT(CASE WHEN u.status = 'active' THEN 1 END) as active_users,
+        COUNT(CASE WHEN u.updated_at >= NOW() - INTERVAL '24 hours' THEN 1 END) as recent_activity
+      FROM users u
+      ${department ? sql`WHERE u.department = ${department}` : sql`WHERE 1=1`}
+    ),
+    audit_stats AS (
+      SELECT 
+        COUNT(CASE WHEN al.timestamp >= NOW() - INTERVAL '24 hours' THEN 1 END) as recent_audit_events
+      FROM audit_log al
+      ${department ? sql`JOIN users u ON al.user_id = u.id WHERE u.department = ${department}` : sql`WHERE 1=1`}
+    )
+    SELECT 
+      ${department || "ALL"} as department,
+      ds.total_documents,
+      ds.recent_documents,
+      drs.total_drafts,
+      drs.pending_drafts,
+      mrs.pending_approvals,
+      us.active_users,
+      us.recent_activity,
+      aus.recent_audit_events,
+      NOW() as recorded_at
+    FROM document_stats ds
+    CROSS JOIN draft_stats drs
+    CROSS JOIN merge_request_stats mrs
+    CROSS JOIN user_stats us
+    CROSS JOIN audit_stats aus
   `
 
-  if (department) {
-    query = sql`${query} AND department = ${department}`
-  }
+  const metrics = await metricsQuery
 
-  query = sql`${query}
-    ORDER BY recorded_at DESC
-    LIMIT ${limit} OFFSET ${offset}
-  `
-
-  return await query
+  return metrics
 }
 
 // Permission functions

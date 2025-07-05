@@ -1,77 +1,78 @@
-import type { NextRequest } from "next/server"
 import jwt from "jsonwebtoken"
+import type { NextRequest } from "next/server"
 import { getUserById } from "@/lib/database"
-import { AuthenticationError, AuthorizationError } from "@/lib/utils/errors"
 
-const JWT_SECRET = process.env.JWT_SECRET
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET environment variable is not set")
-}
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"
 
-export interface AuthenticatedUser {
-  id: string
-  email: string
-  role: string
-  name: string
+export interface AuthResult {
+  success: boolean
+  user?: any
+  error?: string
 }
 
 export function generateToken(userId: string): string {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "24h" })
 }
 
-export function verifyToken(token: string): { userId: string } {
+export function verifyToken(token: string): { userId: string } | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as { userId: string }
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
+    return decoded
+  } catch {
+    return null
+  }
+}
+
+export async function requireAuth(request: NextRequest): Promise<AuthResult> {
+  try {
+    const authHeader = request.headers.get("authorization")
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return { success: false, error: "No token provided" }
+    }
+
+    const token = authHeader.substring(7)
+    const decoded = verifyToken(token)
+    if (!decoded) {
+      return { success: false, error: "Invalid token" }
+    }
+
+    const user = await getUserById(decoded.userId)
+    if (!user) {
+      return { success: false, error: "User not found" }
+    }
+
+    return { success: true, user }
   } catch (error) {
-    throw new AuthenticationError("Invalid or expired token")
+    return { success: false, error: "Authentication failed" }
   }
 }
 
-export function getAuthToken(request: NextRequest): string {
-  const authHeader = request.headers.get("authorization")
-  if (!authHeader) {
-    throw new AuthenticationError("Authorization header missing")
+export async function requireRole(request: NextRequest, allowedRoles: string[]): Promise<AuthResult> {
+  const authResult = await requireAuth(request)
+  if (!authResult.success) {
+    return authResult
   }
 
-  const [bearer, token] = authHeader.split(" ")
-  if (bearer !== "Bearer" || !token) {
-    throw new AuthenticationError("Invalid authorization header format")
+  if (!allowedRoles.includes(authResult.user.role)) {
+    return { success: false, error: "Insufficient permissions" }
   }
 
-  return token
-}
-
-export async function requireAuth(request: NextRequest): Promise<AuthenticatedUser> {
-  const token = getAuthToken(request)
-  const { userId } = verifyToken(token)
-
-  const user = await getUserById(userId)
-  if (!user) {
-    throw new AuthenticationError("User not found")
-  }
-
-  return {
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    name: user.name,
-  }
-}
-
-export async function requireRole(request: NextRequest, roles: string[]): Promise<AuthenticatedUser> {
-  const user = await requireAuth(request)
-
-  if (!roles.includes(user.role)) {
-    throw new AuthorizationError(`Required role: ${roles.join(" or ")}`)
-  }
-
-  return user
+  return authResult
 }
 
 export function getClientIP(request: NextRequest): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0] || request.headers.get("x-real-ip") || request.ip || "unknown"
-  )
+  const forwarded = request.headers.get("x-forwarded-for")
+  const realIP = request.headers.get("x-real-ip")
+
+  if (forwarded) {
+    return forwarded.split(",")[0].trim()
+  }
+
+  if (realIP) {
+    return realIP
+  }
+
+  return "unknown"
 }
 
 export function getUserAgent(request: NextRequest): string {
