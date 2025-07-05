@@ -1,86 +1,129 @@
 export interface User {
-  id: number
+  id: string
+  name: string
   email: string
-  first_name: string
-  last_name: string
-  role: "admin" | "management" | "production" | "lab"
+  password?: string
+  role: "management" | "production" | "lab" | "admin"
   department: string
-  is_active: boolean
+  status: "active" | "inactive"
   created_at: string
   updated_at: string
 }
 
 export interface Document {
-  id: number
+  id: string
   title: string
-  description: string
-  file_path: string
-  file_size: number
-  mime_type: string
-  category: string
-  status: "draft" | "review" | "approved" | "archived"
-  version_number: number
-  is_current_version: boolean
-  created_by: number
-  approved_by: number
+  description?: string
+  file_type: "pdf" | "word" | "excel" | "powerpoint" | "text"
+  classification: string
+  owner_id: string
   created_at: string
   updated_at: string
-  first_name?: string
-  last_name?: string
+  owner_name?: string
+  owner_email?: string
+  current_version?: number
+  file_path?: string
+  file_size?: number
 }
 
 export interface DocumentVersion {
-  id: number
-  document_id: number
+  id: string
+  document_id: string
   version_number: number
-  title: string
-  description: string
+  is_official: boolean
   file_path: string
-  changes_summary: string
-  created_by: number
+  file_size?: number
+  checksum?: string
+  created_by: string
   created_at: string
+  updated_at: string
+  created_by_name?: string
+}
+
+export interface Draft {
+  id: string
+  document_id: string
+  name: string
+  description?: string
+  creator_id: string
+  status: "in_progress" | "pending_approval" | "approved" | "rejected"
+  file_path?: string
+  base_version_id: string
+  created_at: string
+  updated_at: string
+  document_title?: string
+  creator_name?: string
+  base_version?: number
+}
+
+export interface MergeRequest {
+  id: string
+  draft_id: string
+  approver_id: string
+  summary: string
+  status: "pending" | "approved" | "rejected"
+  approved_at?: string
+  rejected_at?: string
+  rejection_reason?: string
+  created_at: string
+  updated_at: string
+  draft_name?: string
+  document_title?: string
+  creator_name?: string
+  approver_name?: string
 }
 
 export interface AuditLog {
   id: number
-  user_id: number
+  user_id: string
   action: string
-  resource_type: string
-  resource_id: number
-  details: any
-  ip_address: string
-  user_agent: string
-  created_at: string
-  first_name?: string
-  last_name?: string
+  document_id?: string
+  draft_id?: string
+  merge_request_id?: string
+  timestamp: string
+  details?: any
+  ip_address?: string
+  user_agent?: string
+  user_name?: string
+  user_email?: string
 }
 
 export interface Report {
-  id: number
+  id: string
+  task_id: string
   title: string
   type: string
-  parameters: any
-  generated_by: number
-  file_path: string
-  status: "pending" | "completed" | "failed"
+  parameters?: any
+  status: "pending" | "processing" | "completed" | "failed"
+  file_path?: string
+  error_message?: string
+  generated_by: string
   created_at: string
-  completed_at: string
-}
-
-export interface DashboardMetric {
-  id: number
-  metric_name: string
-  metric_value: number
-  metric_type: string
-  department: string
-  recorded_at: string
+  completed_at?: string
 }
 
 export interface DocumentPermission {
-  id: number
-  document_id: number
-  user_id: number
-  permission_type: "read" | "write" | "admin"
-  granted_by: number
+  id: string
+  document_id: string
+  user_id: string
+  permission_type: "read" | "write" | "approve"
+  granted_by: string
   granted_at: string
+}
+
+export interface ApiResponse<T = any> {
+  success: boolean
+  data?: T
+  error?: string
+  message?: string
+}
+
+export interface PaginatedResponse<T = any> {
+  data: T[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
 }

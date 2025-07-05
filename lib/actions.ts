@@ -1,99 +1,146 @@
 "use server"
 
-import { sql, createAuditLog } from "@/lib/database"
+import bcrypt from "bcryptjs"
 import { revalidatePath } from "next/cache"
+import { createUser, createDocument, createDraft, createMergeRequest, createAuditLog } from "./database"
 
-export async function createUser(formData: FormData) {
+export async function createUserAction(formData: FormData) {
   try {
+    const name = formData.get("name") as string
     const email = formData.get("email") as string
-    const firstName = formData.get("firstName") as string
-    const lastName = formData.get("lastName") as string
+    const password = formData.get("password") as string
     const role = formData.get("role") as string
     const department = formData.get("department") as string
 
-    // In a real app, you'd hash the password properly
-    const passwordHash = "$2b$10$example_hash_" + Math.random().toString(36)
+    if (!name || !email || !password || !role) {
+      return { success: false, message: "All fields are required" }
+    }
 
-    const result = await sql`
-      INSERT INTO users (email, password_hash, first_name, last_name, role, department)
-      VALUES (${email}, ${passwordHash}, ${firstName}, ${lastName}, ${role}, ${department})
-      RETURNING id
-    `
+    const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Create audit log
-    await createAuditLog(1, "USER_CREATED", "USER", result[0].id, {
+    const user = await createUser({
+      name,
       email,
+      password: hashedPassword,
       role,
-      department,
+      department: department || "",
     })
 
     revalidatePath("/admin/users")
-    return { success: true, message: "User created successfully" }
+    return { success: true, message: "User created successfully", data: user }
   } catch (error) {
-    console.error("Error creating user:", error)
+    console.error("Create user action error:", error)
     return { success: false, message: "Failed to create user" }
   }
 }
 
-export async function updateDocumentStatus(documentId: number, status: string, userId: number) {
+export async function createDocumentAction(formData: FormData) {
   try {
-    await sql`
-      UPDATE documents 
-      SET status = ${status}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${documentId}
-    `
+    const title = formData.get("title") as string
+    const description = formData.get("description") as string
+    const file_type = formData.get("file_type") as string
+    const classification = formData.get("classification") as string
+    const owner_id = formData.get("owner_id") as string
+    const file_path = formData.get("file_path") as string
+    const file_size = Number.parseInt((formData.get("file_size") as string) || "0")
+
+    if (!title || !file_type || !classification || !owner_id || !file_path) {
+      return { success: false, message: "Required fields are missing" }
+    }
+
+    const document = await createDocument({
+      title,
+      description,
+      file_type,
+      classification,
+      owner_id,
+      file_path,
+      file_size,
+    })
 
     // Create audit log
-    await createAuditLog(userId, "DOCUMENT_STATUS_UPDATED", "DOCUMENT", documentId, {
-      new_status: status,
+    await createAuditLog({
+      user_id: owner_id,
+      action: "DOCUMENT_CREATED",
+      document_id: document.id,
+      details: { title, classification, file_type },
     })
 
     revalidatePath("/documents")
-    return { success: true, message: "Document status updated successfully" }
+    return { success: true, message: "Document created successfully", data: document }
   } catch (error) {
-    console.error("Error updating document status:", error)
-    return { success: false, message: "Failed to update document status" }
+    console.error("Create document action error:", error)
+    return { success: false, message: "Failed to create document" }
   }
 }
 
-export async function generateReport(formData: FormData) {
+export async function createDraftAction(formData: FormData) {
   try {
-    const title = formData.get("title") as string
-    const type = formData.get("type") as string
-    const parameters = JSON.parse((formData.get("parameters") as string) || "{}")
-    const userId = Number.parseInt(formData.get("userId") as string)
+    const document_id = formData.get("document_id") as string
+    const name = formData.get("name") as string
+    const description = formData.get("description") as string
+    const creator_id = formData.get("creator_id") as string
+    const base_version_id = formData.get("base_version_id") as string
 
-    const result = await sql`
-      INSERT INTO reports (title, type, parameters, generated_by, status)
-      VALUES (${title}, ${type}, ${JSON.stringify(parameters)}, ${userId}, 'pending')
-      RETURNING id
-    `
+    if (!document_id || !name || !creator_id || !base_version_id) {
+      return { success: false, message: "Required fields are missing" }
+    }
 
-    // Create audit log
-    await createAuditLog(userId, "REPORT_GENERATED", "REPORT", result[0].id, {
-      report_type: type,
-      title,
+    const draft = await createDraft({
+      document_id,
+      name,
+      description,
+      creator_id,
+      base_version_id,
     })
 
-    revalidatePath("/reports")
-    return { success: true, message: "Report generation started" }
+    // Create audit log
+    await createAuditLog({
+      user_id: creator_id,
+      action: "DRAFT_CREATED",
+      document_id,
+      draft_id: draft.id,
+      details: { name, base_version_id },
+    })
+
+    revalidatePath("/drafts")
+    return { success: true, message: "Draft created successfully", data: draft }
   } catch (error) {
-    console.error("Error generating report:", error)
-    return { success: false, message: "Failed to generate report" }
+    console.error("Create draft action error:", error)
+    return { success: false, message: "Failed to create draft" }
   }
 }
 
-export async function recordMetric(metricName: string, metricValue: number, metricType: string, department: string) {
+export async function createMergeRequestAction(formData: FormData) {
   try {
-    await sql`
-      INSERT INTO dashboard_metrics (metric_name, metric_value, metric_type, department)
-      VALUES (${metricName}, ${metricValue}, ${metricType}, ${department})
-    `
+    const draft_id = formData.get("draft_id") as string
+    const approver_id = formData.get("approver_id") as string
+    const summary = formData.get("summary") as string
+    const creator_id = formData.get("creator_id") as string
 
-    revalidatePath("/dashboard")
-    return { success: true, message: "Metric recorded successfully" }
+    if (!draft_id || !approver_id || !summary || !creator_id) {
+      return { success: false, message: "Required fields are missing" }
+    }
+
+    const mergeRequest = await createMergeRequest({
+      draft_id,
+      approver_id,
+      summary,
+    })
+
+    // Create audit log
+    await createAuditLog({
+      user_id: creator_id,
+      action: "MERGE_REQUEST_CREATED",
+      merge_request_id: mergeRequest.id,
+      draft_id,
+      details: { approver_id, summary },
+    })
+
+    revalidatePath("/merge-requests")
+    return { success: true, message: "Merge request created successfully", data: mergeRequest }
   } catch (error) {
-    console.error("Error recording metric:", error)
-    return { success: false, message: "Failed to record metric" }
+    console.error("Create merge request action error:", error)
+    return { success: false, message: "Failed to create merge request" }
   }
 }
