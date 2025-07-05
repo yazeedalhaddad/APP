@@ -1,144 +1,149 @@
-import { type NextRequest, NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
 import { requireAuth } from "@/lib/middleware/auth"
-import { getDocumentVersion } from "@/lib/database"
 import { ApiResponseBuilder } from "@/lib/utils/api-response"
-import { NotFoundError } from "@/lib/utils/errors"
 import { handleApiError } from "@/lib/middleware/error-handler"
+import { neon } from "@neondatabase/serverless"
+import { AppError } from "@/lib/utils/errors"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+const sql = neon(process.env.DATABASE_URL!)
+
+async function compareHandler(request: NextRequest, { params }: { params: { id: string } }) {
+  const user = await requireAuth(request)
+  const { searchParams } = new URL(request.url)
+
+  const fromVersion = searchParams.get("from")
+  const toVersion = searchParams.get("to")
+
+  if (!fromVersion || !toVersion) {
+    throw new AppError("Both 'from' and 'to' version parameters are required", 400)
+  }
+
+  const fromVersionNum = Number.parseInt(fromVersion)
+  const toVersionNum = Number.parseInt(toVersion)
+
+  if (isNaN(fromVersionNum) || isNaN(toVersionNum)) {
+    throw new AppError("Version parameters must be valid numbers", 400)
+  }
+
+  // Fetch both versions
+  const versions = await sql`
+    SELECT version_number, file_path, created_at
+    FROM document_versions
+    WHERE document_id = ${params.id} 
+    AND version_number IN (${fromVersionNum}, ${toVersionNum})
+    ORDER BY version_number
+  `
+
+  if (versions.length !== 2) {
+    throw new AppError("One or both versions not found", 404)
+  }
+
+  // Check if user has access to this document
+  const document = await sql`
+    SELECT id, classification, owner_id
+    FROM documents
+    WHERE id = ${params.id}
+  `
+
+  if (document.length === 0) {
+    throw new AppError("Document not found", 404)
+  }
+
+  const doc = document[0]
+
+  // Check access permissions
+  if (doc.owner_id !== user.id && !["admin", "management"].includes(user.role)) {
+    if (doc.classification === "confidential" && user.role !== "management") {
+      throw new AppError("Access denied", 403)
+    }
+  }
+
+  // Simulate diff generation (since we can't access real files)
+  const mockDiff = generateMockDiff(fromVersionNum, toVersionNum)
+
+  const comparison = {
+    fromVersion: fromVersionNum,
+    toVersion: toVersionNum,
+    fromDate: versions.find((v) => v.version_number === fromVersionNum)?.created_at,
+    toDate: versions.find((v) => v.version_number === toVersionNum)?.created_at,
+    diff: mockDiff,
+  }
+
+  return ApiResponseBuilder.success(comparison, "Document comparison generated successfully")
+}
+
+function generateMockDiff(fromVersion: number, toVersion: number) {
+  // Generate realistic mock diff data
+  const changes = [
+    {
+      type: "unchanged",
+      line: 1,
+      content: "# Document Title",
+    },
+    {
+      type: "unchanged",
+      line: 2,
+      content: "",
+    },
+    {
+      type: "unchanged",
+      line: 3,
+      content: "## Safety Procedures",
+    },
+    {
+      type: "deleted",
+      line: 4,
+      content: `Version ${fromVersion}: Old safety protocol requires manual inspection every 2 hours.`,
+    },
+    {
+      type: "added",
+      line: 4,
+      content: `Version ${toVersion}: Updated safety protocol requires automated monitoring with manual inspection every 4 hours.`,
+    },
+    {
+      type: "unchanged",
+      line: 5,
+      content: "",
+    },
+    {
+      type: "unchanged",
+      line: 6,
+      content: "## Equipment Requirements",
+    },
+    {
+      type: "unchanged",
+      line: 7,
+      content: "- Safety goggles",
+    },
+    {
+      type: "unchanged",
+      line: 8,
+      content: "- Protective gloves",
+    },
+    {
+      type: "added",
+      line: 9,
+      content: "- Emergency shutdown button access",
+    },
+    {
+      type: "unchanged",
+      line: 10,
+      content: "",
+    },
+    {
+      type: "modified",
+      line: 11,
+      oldContent: "Temperature range: 20-25°C",
+      newContent: "Temperature range: 18-27°C (expanded for seasonal variation)",
+    },
+  ]
+
+  return changes
+}
+
+export const GET = async (request: NextRequest, context: any) => {
   try {
-    // Verify authentication
-    const authResult = await requireAuth(request)
-    if (!authResult.success) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { searchParams } = new URL(request.url)
-    const fromVersion = searchParams.get("from")
-    const toVersion = searchParams.get("to")
-
-    if (!fromVersion || !toVersion) {
-      return ApiResponseBuilder.badRequest("Both 'from' and 'to' version parameters are required")
-    }
-
-    const fromVersionNum = Number.parseInt(fromVersion)
-    const toVersionNum = Number.parseInt(toVersion)
-
-    if (isNaN(fromVersionNum) || isNaN(toVersionNum)) {
-      return ApiResponseBuilder.badRequest("Version parameters must be valid numbers")
-    }
-
-    // Fetch both document versions
-    const fromDoc = await getDocumentVersion(params.id, fromVersionNum)
-    const toDoc = await getDocumentVersion(params.id, toVersionNum)
-
-    if (!fromDoc) {
-      throw new NotFoundError(`Document version ${fromVersionNum} not found`)
-    }
-
-    if (!toDoc) {
-      throw new NotFoundError(`Document version ${toVersionNum} not found`)
-    }
-
-    // Simulate document diffing (since we can't access real file system)
-    const simulatedDiff = [
-      {
-        type: "unchanged",
-        line: 1,
-        content: "Standard Operating Procedure - Chemical Handling",
-      },
-      {
-        type: "unchanged",
-        line: 2,
-        content: "Version Control and Safety Guidelines",
-      },
-      {
-        type: "unchanged",
-        line: 3,
-        content: "",
-      },
-      {
-        type: "deleted",
-        line: 4,
-        content: "Chemical handling procedures must follow the 2023 guidelines.",
-      },
-      {
-        type: "added",
-        line: 4,
-        content: "Chemical handling procedures must follow the updated 2024 guidelines with enhanced safety protocols.",
-      },
-      {
-        type: "unchanged",
-        line: 5,
-        content: "Safety equipment requirements include gloves, goggles, and lab coats.",
-      },
-      {
-        type: "deleted",
-        line: 6,
-        content: "Temperature monitoring should be conducted every 2 hours.",
-      },
-      {
-        type: "added",
-        line: 6,
-        content: "Temperature monitoring should be conducted every hour using the new digital monitoring system.",
-      },
-      {
-        type: "unchanged",
-        line: 7,
-        content: "All procedures must be documented in the laboratory log.",
-      },
-      {
-        type: "added",
-        line: 8,
-        content: "New equipment calibration procedures are required monthly.",
-      },
-      {
-        type: "unchanged",
-        line: 9,
-        content: "",
-      },
-      {
-        type: "unchanged",
-        line: 10,
-        content: "Emergency Procedures:",
-      },
-      {
-        type: "deleted",
-        line: 11,
-        content: "In case of spill, notify supervisor immediately.",
-      },
-      {
-        type: "added",
-        line: 11,
-        content:
-          "In case of spill, activate emergency protocol and notify both supervisor and safety officer immediately.",
-      },
-    ]
-
-    const responseData = {
-      fromVersion: fromVersionNum,
-      toVersion: toVersionNum,
-      fromVersionInfo: {
-        id: fromDoc.id,
-        created_at: fromDoc.created_at,
-        created_by_name: fromDoc.created_by_name,
-        is_official: fromDoc.is_official,
-      },
-      toVersionInfo: {
-        id: toDoc.id,
-        created_at: toDoc.created_at,
-        created_by_name: toDoc.created_by_name,
-        is_official: toDoc.is_official,
-      },
-      diff: simulatedDiff,
-      summary: {
-        additions: simulatedDiff.filter((d) => d.type === "added").length,
-        deletions: simulatedDiff.filter((d) => d.type === "deleted").length,
-        unchanged: simulatedDiff.filter((d) => d.type === "unchanged").length,
-      },
-    }
-
-    return ApiResponseBuilder.success(responseData, "Document comparison retrieved successfully")
+    return await compareHandler(request, context)
   } catch (error) {
     return handleApiError(error)
   }

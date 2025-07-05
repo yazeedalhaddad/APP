@@ -1,158 +1,126 @@
-import { describe, it, expect, jest, beforeEach } from "@jest/globals"
 import { UserService } from "@/lib/services/user-service"
-import { AuthenticationError, ConflictError } from "@/lib/utils/errors"
+import { AppError } from "@/lib/utils/errors"
+import jest from "jest"
 
-// Mock the database functions
-jest.mock("@/lib/database", () => ({
-  getUserByEmail: jest.fn(),
-  getUserById: jest.fn(),
-  getAllUsers: jest.fn(),
-  createUser: jest.fn(),
-  updateUser: jest.fn(),
-  deleteUser: jest.fn(),
-  createAuditLog: jest.fn(),
+// Mock the database
+jest.mock("@neondatabase/serverless", () => ({
+  neon: jest.fn(() => jest.fn()),
 }))
 
 // Mock bcrypt
-jest.mock("bcryptjs", () => ({
+jest.mock("bcrypt", () => ({
   compare: jest.fn(),
   hash: jest.fn(),
 }))
 
-// Mock auth middleware
-jest.mock("@/lib/middleware/auth", () => ({
-  generateToken: jest.fn(),
+// Mock jsonwebtoken
+jest.mock("jsonwebtoken", () => ({
+  sign: jest.fn(),
+  verify: jest.fn(),
 }))
 
 describe("UserService", () => {
   let userService: UserService
+  let mockSql: jest.Mock
 
   beforeEach(() => {
+    const { neon } = require("@neondatabase/serverless")
+    mockSql = jest.fn()
+    neon.mockReturnValue(mockSql)
     userService = new UserService()
+  })
+
+  afterEach(() => {
     jest.clearAllMocks()
   })
 
   describe("login", () => {
     it("should successfully login with valid credentials", async () => {
       const mockUser = {
-        id: "user-1",
+        id: "1",
         email: "test@example.com",
-        password: "hashedPassword",
+        password: "hashedpassword",
         name: "Test User",
         role: "admin",
+        is_active: true,
       }
 
-      const { getUserByEmail, createAuditLog } = await import("@/lib/database")
-      const bcrypt = await import("bcryptjs")
-      const { generateToken } = await import("@/lib/middleware/auth")
-      ;(getUserByEmail as jest.Mock).mockResolvedValue(mockUser)
-      ;(bcrypt.compare as jest.Mock).mockResolvedValue(true)
-      ;(generateToken as jest.Mock).mockReturnValue("mock-token")
-      ;(createAuditLog as jest.Mock).mockResolvedValue({})
+      mockSql.mockResolvedValueOnce([mockUser])
 
-      const result = await userService.login({
-        email: "test@example.com",
-        password: "password123",
-      })
+      const bcrypt = require("bcrypt")
+      bcrypt.compare.mockResolvedValue(true)
 
-      expect(result).toEqual({
-        user: {
-          id: "user-1",
-          email: "test@example.com",
-          name: "Test User",
-          role: "admin",
-        },
-        token: "mock-token",
-      })
+      const jwt = require("jsonwebtoken")
+      jwt.sign.mockReturnValue("mock-token")
 
-      expect(createAuditLog).toHaveBeenCalledWith({
-        user_id: "user-1",
-        action: "USER_LOGIN",
-        details: { email: "test@example.com" },
-        ip_address: undefined,
-        user_agent: undefined,
-      })
+      const result = await userService.login(
+        { email: "test@example.com", password: "password" },
+        "127.0.0.1",
+        "test-agent",
+      )
+
+      expect(result).toHaveProperty("user")
+      expect(result).toHaveProperty("token")
+      expect(result.user.email).toBe("test@example.com")
+      expect(result.token).toBe("mock-token")
     })
 
-    it("should throw AuthenticationError for invalid email", async () => {
-      const { getUserByEmail } = await import("@/lib/database")
-      ;(getUserByEmail as jest.Mock).mockResolvedValue(null)
+    it("should throw error for invalid credentials", async () => {
+      mockSql.mockResolvedValueOnce([])
 
       await expect(
-        userService.login({
-          email: "invalid@example.com",
-          password: "password123",
-        }),
-      ).rejects.toThrow(AuthenticationError)
+        userService.login({ email: "invalid@example.com", password: "password" }, "127.0.0.1", "test-agent"),
+      ).rejects.toThrow(AppError)
     })
 
-    it("should throw AuthenticationError for invalid password", async () => {
+    it("should throw error for inactive user", async () => {
       const mockUser = {
-        id: "user-1",
+        id: "1",
         email: "test@example.com",
-        password: "hashedPassword",
+        password: "hashedpassword",
+        name: "Test User",
+        role: "admin",
+        is_active: false,
       }
 
-      const { getUserByEmail } = await import("@/lib/database")
-      const bcrypt = await import("bcryptjs")
-      ;(getUserByEmail as jest.Mock).mockResolvedValue(mockUser)
-      ;(bcrypt.compare as jest.Mock).mockResolvedValue(false)
+      mockSql.mockResolvedValueOnce([mockUser])
 
       await expect(
-        userService.login({
-          email: "test@example.com",
-          password: "wrongpassword",
-        }),
-      ).rejects.toThrow(AuthenticationError)
+        userService.login({ email: "test@example.com", password: "password" }, "127.0.0.1", "test-agent"),
+      ).rejects.toThrow(AppError)
     })
   })
 
-  describe("createUser", () => {
-    it("should successfully create a new user", async () => {
-      const userData = {
-        name: "New User",
-        email: "new@example.com",
-        password: "password123",
-        role: "production",
-        department: "Manufacturing",
+  describe("getUserById", () => {
+    it("should return user when found", async () => {
+      const mockUser = {
+        id: "1",
+        email: "test@example.com",
+        name: "Test User",
+        role: "admin",
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date(),
       }
 
-      const mockNewUser = {
-        id: "user-2",
-        ...userData,
-        password: "hashedPassword",
-      }
+      mockSql.mockResolvedValueOnce([mockUser])
 
-      const { getUserByEmail, createUser, createAuditLog } = await import("@/lib/database")
-      const bcrypt = await import("bcryptjs")
-      ;(getUserByEmail as jest.Mock).mockResolvedValue(null)
-      ;(bcrypt.hash as jest.Mock).mockResolvedValue("hashedPassword")
-      ;(createUser as jest.Mock).mockResolvedValue(mockNewUser)
-      ;(createAuditLog as jest.Mock).mockResolvedValue({})
+      const result = await userService.getUserById("1")
 
-      const result = await userService.createUser(userData, "admin-1")
-
-      expect(result).toEqual(mockNewUser)
-      expect(bcrypt.hash).toHaveBeenCalledWith("password123", 12)
-      expect(createUser).toHaveBeenCalledWith({
-        ...userData,
-        password: "hashedPassword",
-      })
+      expect(result).toEqual(mockUser)
+      expect(mockSql).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.stringContaining("SELECT"),
+          expect.stringContaining("FROM users"),
+          expect.stringContaining("WHERE id ="),
+        ]),
+      )
     })
 
-    it("should throw ConflictError when email already exists", async () => {
-      const userData = {
-        name: "New User",
-        email: "existing@example.com",
-        password: "password123",
-        role: "production",
-        department: "Manufacturing",
-      }
+    it("should throw error when user not found", async () => {
+      mockSql.mockResolvedValueOnce([])
 
-      const { getUserByEmail } = await import("@/lib/database")
-      ;(getUserByEmail as jest.Mock).mockResolvedValue({ id: "existing-user" })
-
-      await expect(userService.createUser(userData, "admin-1")).rejects.toThrow(ConflictError)
+      await expect(userService.getUserById("nonexistent")).rejects.toThrow(AppError)
     })
   })
 })

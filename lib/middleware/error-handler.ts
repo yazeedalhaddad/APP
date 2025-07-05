@@ -22,6 +22,23 @@ export function handleApiError(error: unknown): NextResponse {
     }
   }
 
+  // Handle database connection errors
+  if (error instanceof Error) {
+    if (error.message.includes("DATABASE_URL") || error.message.includes("connection")) {
+      return ApiResponseBuilder.internalServerError("Database connection failed. Please check your configuration.")
+    }
+  }
+
   // Handle unexpected errors
   return ApiResponseBuilder.internalServerError("An unexpected error occurred")
+}
+
+export function withErrorHandler<T extends any[]>(handler: (...args: T) => Promise<NextResponse>) {
+  return async (...args: T): Promise<NextResponse> => {
+    try {
+      return await handler(...args)
+    } catch (error) {
+      return handleApiError(error)
+    }
+  }
 }

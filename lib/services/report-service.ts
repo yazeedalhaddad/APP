@@ -1,82 +1,35 @@
-import { v4 as uuidv4 } from "uuid"
-import {
-  createReport as dbCreateReport,
-  getReportByTaskId as dbGetReportByTaskId,
-  updateReportStatus as dbUpdateReportStatus,
-  createAuditLog,
-} from "@/lib/database"
-import { NotFoundError } from "@/lib/utils/errors"
-import type { Report } from "@/types/database"
+import { neon } from "@neondatabase/serverless"
+import type { ReportRequest, ReportStatus } from "@/types/database"
+import { AppError } from "@/lib/utils/errors"
 
-export interface GenerateReportData {
-  title: string
-  type: string
-  parameters?: any
-}
-
-export interface ReportTaskResult {
-  task_id: string
-  report_id: string
-}
-
-interface ReportTask {
-  taskId: string
-  reportData: GenerateReportData
-  userId: string
-  ipAddress?: string
-  userAgent?: string
-}
+const sql = neon(process.env.DATABASE_URL!)
 
 // In-memory queue for development environment
-const reportQueue: ReportTask[] = []
+const reportQueue: Array<{
+  taskId: string
+  reportData: ReportRequest
+  userId: string
+}> = []
+
 let isProcessing = false
 
 export class ReportService {
-  async generateReport(
-    reportData: GenerateReportData,
-    userId: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ): Promise<ReportTaskResult> {
-    const taskId = uuidv4()
+  async generateReport(reportData: ReportRequest, userId: string): Promise<{ taskId: string }> {
+    const taskId = `report_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
-    const report = await dbCreateReport({
-      task_id: taskId,
-      title: reportData.title,
-      type: reportData.type,
-      parameters: reportData.parameters,
-      generated_by: userId,
-    })
+    // Create initial report record
+    await sql`
+      INSERT INTO reports (id, type, parameters, status, created_by, created_at)
+      VALUES (${taskId}, ${reportData.type}, ${JSON.stringify(reportData.parameters)}, 'pending', ${userId}, NOW())
+    `
 
-    // Create audit log
-    await createAuditLog({
-      user_id: userId,
-      action: "REPORT_GENERATION_STARTED",
-      details: {
-        report_id: report.id,
-        title: reportData.title,
-        type: reportData.type,
-        task_id: taskId,
-      },
-      ip_address: ipAddress,
-      user_agent: userAgent,
-    })
+    // Add to queue
+    reportQueue.push({ taskId, reportData, userId })
 
-    // Add task to queue and trigger processing
-    reportQueue.push({
-      taskId,
-      reportData,
-      userId,
-      ipAddress,
-      userAgent,
-    })
-
+    // Trigger processing
     this.triggerReportProcessing()
 
-    return {
-      task_id: taskId,
-      report_id: report.id,
-    }
+    return { taskId }
   }
 
   private triggerReportProcessing(): void {
@@ -87,99 +40,89 @@ export class ReportService {
     this.processReport(task)
   }
 
-  private async processReport(task: ReportTask): Promise<void> {
+  private async processReport(task: { taskId: string; reportData: ReportRequest; userId: string }): Promise<void> {
     try {
-      // Simulate report generation work
-      await new Promise((resolve) => setTimeout(resolve, 10000 + Math.random() * 5000)) // 10-15 seconds
+      // Update status to processing
+      await this.dbUpdateReportStatus(task.taskId, "processing")
 
-      // Update report status to completed
-      await dbUpdateReportStatus(task.taskId, "completed", `/reports/generated/${task.taskId}.pdf`, undefined)
+      // Simulate report generation work (10-15 seconds)
+      await new Promise((resolve) => setTimeout(resolve, Math.random() * 5000 + 10000))
 
-      // Create audit log for completion
-      await createAuditLog({
-        user_id: task.userId,
-        action: "REPORT_GENERATION_COMPLETED",
-        details: {
-          task_id: task.taskId,
-          title: task.reportData.title,
-          type: task.reportData.type,
-        },
-        ip_address: task.ipAddress,
-        user_agent: task.userAgent,
-      })
+      // Generate mock file path
+      const filePath = `/reports/generated/${task.taskId}.pdf`
+
+      // Update status to completed
+      await this.dbUpdateReportStatus(task.taskId, "completed", filePath)
     } catch (error) {
-      // Update report status to failed
-      await dbUpdateReportStatus(
-        task.taskId,
-        "failed",
-        undefined,
-        error instanceof Error ? error.message : "Unknown error occurred",
-      )
-
-      // Create audit log for failure
-      await createAuditLog({
-        user_id: task.userId,
-        action: "REPORT_GENERATION_FAILED",
-        details: {
-          task_id: task.taskId,
-          title: task.reportData.title,
-          type: task.reportData.type,
-          error: error instanceof Error ? error.message : "Unknown error",
-        },
-        ip_address: task.ipAddress,
-        user_agent: task.userAgent,
-      })
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
+      await this.dbUpdateReportStatus(task.taskId, "failed", undefined, errorMessage)
     } finally {
       isProcessing = false
-      // Process next item in queue if any
+      // Process next item in queue
       this.triggerReportProcessing()
     }
   }
 
-  async getReportStatus(taskId: string): Promise<Report> {
-    const report = await dbGetReportByTaskId(taskId)
-    if (!report) {
-      throw new NotFoundError("Report not found")
-    }
-    return report
+  private async dbUpdateReportStatus(
+    taskId: string,
+    status: ReportStatus,
+    filePath?: string,
+    errorMessage?: string,
+  ): Promise<void> {
+    await sql`
+      UPDATE reports 
+      SET 
+        status = ${status},
+        file_path = ${filePath || null},
+        error_message = ${errorMessage || null},
+        completed_at = ${status === "completed" || status === "failed" ? new Date().toISOString() : null}
+      WHERE id = ${taskId}
+    `
   }
 
-  async downloadReport(
-    reportId: string,
-    userId: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ): Promise<{ download_url: string; filename: string }> {
-    const report = await dbGetReportByTaskId(reportId)
-    if (!report) {
-      throw new NotFoundError("Report not found")
+  async getReportStatus(taskId: string): Promise<any> {
+    const result = await sql`
+      SELECT id, type, status, file_path, error_message, created_at, completed_at
+      FROM reports
+      WHERE id = ${taskId}
+    `
+
+    if (result.length === 0) {
+      throw new AppError("Report not found", 404)
     }
 
-    if (report.status !== "completed" || !report.file_path) {
-      throw new NotFoundError("Report is not ready for download")
+    return result[0]
+  }
+
+  async downloadReport(reportId: string, userId: string): Promise<{ filePath: string; fileName: string }> {
+    const result = await sql`
+      SELECT file_path, type, created_by
+      FROM reports
+      WHERE id = ${reportId} AND status = 'completed'
+    `
+
+    if (result.length === 0) {
+      throw new AppError("Report not found or not completed", 404)
     }
 
-    // Create audit log
-    await createAuditLog({
-      user_id: userId,
-      action: "REPORT_DOWNLOADED",
-      details: { report_id: report.id, title: report.title },
-      ip_address: ipAddress,
-      user_agent: userAgent,
-    })
+    const report = result[0]
+
+    // Check if user has access to this report
+    if (report.created_by !== userId) {
+      // Check if user has admin role
+      const userResult = await sql`
+        SELECT role FROM users WHERE id = ${userId}
+      `
+
+      if (userResult.length === 0 || !["admin", "management"].includes(userResult[0].role)) {
+        throw new AppError("Access denied", 403)
+      }
+    }
 
     return {
-      download_url: report.file_path,
-      filename: `${report.title}.pdf`,
+      filePath: report.file_path,
+      fileName: `${report.type}_report_${reportId}.pdf`,
     }
-  }
-
-  async updateReportStatus(taskId: string, status: string, filePath?: string, errorMessage?: string): Promise<Report> {
-    const report = await dbUpdateReportStatus(taskId, status, filePath, errorMessage)
-    if (!report) {
-      throw new NotFoundError("Report not found")
-    }
-    return report
   }
 }
 

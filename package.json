@@ -1,16 +1,18 @@
 {
-  "name": "my-v0-project",
+  "name": "titanium-document-workflow",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
-    "@hookform/resolvers": "^3.9.1",
-    "@jest/globals": "latest",
+    "@ai-sdk/openai": "^0.0.66",
+    "@hookform/resolvers": "^3.9.0",
     "@neondatabase/serverless": "latest",
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-alert-dialog": "latest",
@@ -39,7 +41,7 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
-    "autoprefixer": "^10.4.20",
+    "ai": "^3.4.32",
     "bcryptjs": "latest",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -52,6 +54,7 @@
     "lucide-react": "^0.454.0",
     "next": "15.2.4",
     "next-themes": "latest",
+    "node-notifier": "latest",
     "react": "^19",
     "react-day-picker": "latest",
     "react-dom": "^19",
@@ -62,15 +65,20 @@
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "use-sync-external-store": "latest",
-    "uuid": "latest",
     "vaul": "latest",
     "zod": "latest",
     "zustand": "latest"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "15.1.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"

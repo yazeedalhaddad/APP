@@ -1,166 +1,381 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
-import { FileText, Clock, CheckCircle, AlertTriangle, TrendingUp, Building, Eye } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { FileText, Users, TrendingUp, Clock, CheckCircle, XCircle } from "lucide-react"
 import { useAppStore } from "@/stores/app-store"
+import { DocumentViewer } from "@/components/document-viewer"
+import { ReportsInterface } from "@/components/reports-interface"
 
-interface ManagementDashboardProps {
-  onDocumentSelect: (document: any) => void
+interface DashboardMetrics {
+  documents: {
+    total: number
+    byClassification: {
+      public: number
+      internal: number
+      confidential: number
+    }
+    recentlyCreated: number
+  }
+  drafts: {
+    total: number
+    active: number
+    recentlyCreated: number
+  }
+  mergeRequests: {
+    total: number
+    pending: number
+    approved: number
+    rejected: number
+    recent: number
+    approvalRate: number
+  }
+  users: {
+    total: number
+    byRole: {
+      admin: number
+      management: number
+      production: number
+      lab: number
+    }
+    activeUsers: number
+    activityRate: number
+  }
+  activity: {
+    totalAuditLogs: number
+    recentActivities: number
+    recentLogins: number
+  }
 }
 
-export function ManagementDashboard({ onDocumentSelect }: ManagementDashboardProps) {
-  const { user, mergeRequests, isLoading, fetchMergeRequests } = useAppStore()
+export function ManagementDashboard() {
+  const {
+    user,
+    documents,
+    activeDocument,
+    mergeRequests,
+    isLoading,
+    selectDocument,
+    approveMergeRequest,
+    rejectMergeRequest,
+  } = useAppStore()
+
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
+  const [metricsLoading, setMetricsLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState("overview")
 
   useEffect(() => {
-    if (user) {
-      fetchMergeRequests({ status: "pending" })
+    fetchMetrics()
+  }, [])
+
+  const fetchMetrics = async () => {
+    try {
+      const token = useAppStore.getState().token
+      if (!token) return
+
+      const response = await fetch("/api/dashboard/metrics", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        setMetrics(result.data)
+      }
+    } catch (error) {
+      console.error("Failed to fetch metrics:", error)
+    } finally {
+      setMetricsLoading(false)
     }
-  }, [user])
+  }
 
-  const kpiData = [
-    {
-      label: "Total Pending Approvals",
-      value: mergeRequests.filter((mr) => mr.status === "pending").length.toString(),
-      icon: Clock,
-      color: "text-orange-600",
-      bg: "bg-orange-50",
-    },
-    { label: "Avg. Turnaround Time", value: "2.3 days", icon: TrendingUp, color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "Documents This Month", value: "847", icon: FileText, color: "text-green-600", bg: "bg-green-50" },
-    { label: "Recently Archived", value: "156", icon: CheckCircle, color: "text-slate-600", bg: "bg-slate-50" },
-  ]
+  const handleApproveRequest = async (id: string) => {
+    await approveMergeRequest(id)
+  }
 
-  const departmentStatus = [
-    { department: "Laboratory", active: 23, pending: 8, completed: 145 },
-    { department: "Production", active: 15, pending: 4, completed: 98 },
-    { department: "Quality Control", active: 7, pending: 2, completed: 67 },
-  ]
+  const handleRejectRequest = async (id: string) => {
+    const reason = prompt("Please provide a reason for rejection:")
+    if (reason) {
+      await rejectMergeRequest(id, reason)
+    }
+  }
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-32 w-full" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 w-full" />
-          ))}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Skeleton className="h-64 w-full" />
-          <Skeleton className="h-64 w-full" />
-        </div>
-      </div>
-    )
+  if (activeDocument) {
+    return <DocumentViewer />
   }
 
   return (
-    <div className="space-y-6">
-      {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg p-6 text-white">
-        <h2 className="text-2xl font-bold mb-2">Good morning, {user?.name}</h2>
-        <p className="text-blue-100">
-          You have {mergeRequests.filter((mr) => mr.status === "pending").length} documents awaiting your approval and{" "}
-          {mergeRequests.filter((mr) => mr.status === "pending" && mr.priority === "high").length} high-priority items
-          requiring immediate attention.
-        </p>
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Management Dashboard</h1>
+          <p className="text-muted-foreground">Welcome back, {user?.name}. Here's your system overview.</p>
+        </div>
+        <Button onClick={fetchMetrics} disabled={metricsLoading}>
+          Refresh Data
+        </Button>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {kpiData.map((kpi, index) => (
-          <Card key={index} className="border-0 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">{kpi.label}</p>
-                  <p className="text-2xl font-bold text-slate-800 mt-1">{kpi.value}</p>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="approvals">Approvals</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6">
+          {/* Key Metrics Cards */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Documents</CardTitle>
+                <FileText className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {metricsLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">{metrics?.documents.total || 0}</div>
+                    <p className="text-xs text-muted-foreground">
+                      +{metrics?.documents.recentlyCreated || 0} this month
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active Users</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {metricsLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">{metrics?.users.activeUsers || 0}</div>
+                    <p className="text-xs text-muted-foreground">{metrics?.users.activityRate || 0}% activity rate</p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {metricsLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">{metrics?.mergeRequests.pending || 0}</div>
+                    <p className="text-xs text-muted-foreground">Require your attention</p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Approval Rate</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {metricsLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">{metrics?.mergeRequests.approvalRate || 0}%</div>
+                    <p className="text-xs text-muted-foreground">Overall approval rate</p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Document Classification Breakdown */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Document Classification</CardTitle>
+              <CardDescription>Breakdown of documents by security classification</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {metricsLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
                 </div>
-                <div className={`p-3 rounded-lg ${kpi.bg}`}>
-                  <kpi.icon className={`h-6 w-6 ${kpi.color}`} />
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Public</span>
+                    <Badge variant="secondary">{metrics?.documents.byClassification.public || 0}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Internal</span>
+                    <Badge variant="outline">{metrics?.documents.byClassification.internal || 0}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Confidential</span>
+                    <Badge variant="destructive">{metrics?.documents.byClassification.confidential || 0}</Badge>
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
-        ))}
-      </div>
+        </TabsContent>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Departmental Workflow Status */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Building className="h-5 w-5 text-blue-600" />
-              <span>Departmental Workflow Status</span>
-            </CardTitle>
-            <CardDescription>Current document activity across all departments</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {departmentStatus.map((dept, index) => (
-              <div key={index} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-slate-800">{dept.department}</span>
-                  <div className="flex items-center space-x-4 text-sm">
-                    <span className="text-orange-600">{dept.pending} pending</span>
-                    <span className="text-blue-600">{dept.active} active</span>
-                    <span className="text-green-600">{dept.completed} completed</span>
-                  </div>
-                </div>
-                <Progress
-                  value={(dept.completed / (dept.completed + dept.active + dept.pending)) * 100}
-                  className="h-2"
-                />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* High-Priority Approvals */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <AlertTriangle className="h-5 w-5 text-orange-600" />
-              <span>Pending Approvals</span>
-            </CardTitle>
-            <CardDescription>Merge requests requiring your attention</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {mergeRequests
-              .filter((mr) => mr.status === "pending")
-              .slice(0, 3)
-              .map((doc, index) => (
-                <div key={index} className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <h4 className="font-medium text-slate-800">{doc.draft_name}</h4>
-                        <Badge variant="secondary" className="text-xs">
-                          Merge Request
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-slate-600 mb-2">{doc.summary}</p>
-                      <div className="flex items-center space-x-4 text-xs text-slate-500">
-                        <span>From: {doc.creator_name}</span>
-                        <span>Document: {doc.document_title}</span>
+        <TabsContent value="approvals" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Merge Requests</CardTitle>
+              <CardDescription>Review and approve document changes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="flex items-center space-x-4">
+                      <Skeleton className="h-12 w-12 rounded-full" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-[250px]" />
+                        <Skeleton className="h-4 w-[200px]" />
                       </div>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => onDocumentSelect(doc)} className="ml-4">
-                      <Eye className="h-4 w-4 mr-1" />
-                      Review Changes
-                    </Button>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            {mergeRequests.filter((mr) => mr.status === "pending").length === 0 && (
-              <p className="text-sm text-slate-500 text-center py-4">No pending approvals</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Document</TableHead>
+                      <TableHead>Requester</TableHead>
+                      <TableHead>Summary</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {mergeRequests
+                      .filter((mr) => mr.status === "pending")
+                      .map((request) => (
+                        <TableRow key={request.id}>
+                          <TableCell className="font-medium">
+                            {request.draft?.document?.title || "Unknown Document"}
+                          </TableCell>
+                          <TableCell>{request.draft?.creator?.name || "Unknown"}</TableCell>
+                          <TableCell className="max-w-xs truncate">{request.summary}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">
+                              <Clock className="mr-1 h-3 w-3" />
+                              Pending
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex space-x-2">
+                              <Button size="sm" onClick={() => handleApproveRequest(request.id)} disabled={isLoading}>
+                                <CheckCircle className="mr-1 h-3 w-3" />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRejectRequest(request.id)}
+                                disabled={isLoading}
+                              >
+                                <XCircle className="mr-1 h-3 w-3" />
+                                Reject
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="documents" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Documents</CardTitle>
+              <CardDescription>Recently created or modified documents</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-4">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="flex items-center space-x-4">
+                      <Skeleton className="h-8 w-8" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-[300px]" />
+                        <Skeleton className="h-4 w-[200px]" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Classification</TableHead>
+                      <TableHead>Owner</TableHead>
+                      <TableHead>Last Modified</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {documents.slice(0, 10).map((doc) => (
+                      <TableRow key={doc.id}>
+                        <TableCell className="font-medium">{doc.title}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              doc.classification === "confidential"
+                                ? "destructive"
+                                : doc.classification === "internal"
+                                  ? "outline"
+                                  : "secondary"
+                            }
+                          >
+                            {doc.classification}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{doc.owner?.name || "Unknown"}</TableCell>
+                        <TableCell>{new Date(doc.updated_at).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Button size="sm" variant="outline" onClick={() => selectDocument(doc.id)}>
+                            View
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="reports">
+          <ReportsInterface />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

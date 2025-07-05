@@ -5,37 +5,18 @@ import { ApiResponseBuilder } from "@/lib/utils/api-response"
 import { handleApiError } from "@/lib/middleware/error-handler"
 import { sql } from "@/lib/db"
 
+async function metricsHandler(request: NextRequest) {
+  // Require management, admin, production, or lab role
+  const user = await requireRole(request, ["management", "admin", "production", "lab"])
+
+  const metrics = await getDashboardMetrics(user.role)
+
+  return ApiResponseBuilder.success(metrics, "Dashboard metrics retrieved successfully")
+}
+
 export async function GET(request: NextRequest) {
   try {
-    // Verify authentication and role
-    const authResult = await requireRole(request, ["management", "admin", "production", "lab"])
-    if (!authResult.success) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { searchParams } = new URL(request.url)
-    const department = searchParams.get("department")
-    const limit = Number.parseInt(searchParams.get("limit") || "100")
-    const offset = Number.parseInt(searchParams.get("offset") || "0")
-
-    // Get optimized dashboard metrics with calculations done in SQL
-    const metrics = await getDashboardMetrics({
-      department: department || undefined,
-      limit,
-      offset,
-    })
-
-    return ApiResponseBuilder.success(
-      {
-        metrics,
-        pagination: {
-          limit,
-          offset,
-          total: metrics.length,
-        },
-      },
-      "Dashboard metrics retrieved successfully",
-    )
+    return await metricsHandler(request)
   } catch (error) {
     return handleApiError(error)
   }

@@ -1,5 +1,4 @@
 "use client"
-
 import {
   Sidebar,
   SidebarContent,
@@ -13,53 +12,111 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { LayoutDashboard, Search, FileText, Users, Activity, Settings, GitBranch, Building2 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  LayoutDashboard,
+  Search,
+  Users,
+  FileText,
+  Activity,
+  BarChart3,
+  Settings,
+  LogOut,
+  ChevronUp,
+  Building2,
+} from "lucide-react"
 import { useAppStore } from "@/stores/app-store"
 
 interface AppSidebarProps {
-  currentView: string
+  activeView: string
   onViewChange: (view: string) => void
 }
 
-export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
-  const { user } = useAppStore()
+export function AppSidebar({ activeView, onViewChange }: AppSidebarProps) {
+  const { user, logout, mergeRequests } = useAppStore()
 
   if (!user) return null
 
-  const getMenuItems = () => {
-    const baseItems = [
-      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { id: "search", label: "Search Documents", icon: Search },
-      { id: "reports", label: "Reports", icon: FileText },
-      { id: "version-control", label: "Version Control Demo", icon: GitBranch },
-    ]
+  const pendingApprovals = mergeRequests.filter((mr) => mr.status === "pending").length
 
-    if (user.role === "admin") {
-      return [
-        ...baseItems,
-        { id: "users", label: "User Management", icon: Users },
-        { id: "audit", label: "Audit Log", icon: Activity },
-        { id: "settings", label: "System Settings", icon: Settings },
-      ]
-    }
+  const navigationItems = [
+    {
+      title: "Dashboard",
+      icon: LayoutDashboard,
+      id: "dashboard",
+      badge: null,
+    },
+    {
+      title: "Search Documents",
+      icon: Search,
+      id: "search",
+      badge: null,
+    },
+    {
+      title: "Reports",
+      icon: BarChart3,
+      id: "reports",
+      badge: null,
+    },
+  ]
 
-    return baseItems
+  // Add admin/management specific items
+  if (["admin", "management"].includes(user.role)) {
+    navigationItems.push(
+      {
+        title: "User Management",
+        icon: Users,
+        id: "users",
+        badge: null,
+      },
+      {
+        title: "Audit Log",
+        icon: Activity,
+        id: "audit",
+        badge: null,
+      },
+    )
   }
 
-  const menuItems = getMenuItems()
+  const getUserInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+  }
+
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case "admin":
+        return "bg-red-100 text-red-800"
+      case "management":
+        return "bg-purple-100 text-purple-800"
+      case "production":
+        return "bg-green-100 text-green-800"
+      case "lab":
+        return "bg-blue-100 text-blue-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b p-4">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Building2 className="h-5 w-5 text-white" />
-          </div>
+      <SidebarHeader>
+        <div className="flex items-center space-x-2 px-2 py-4">
+          <Building2 className="h-8 w-8 text-blue-600" />
           <div>
-            <h2 className="font-semibold text-slate-800">MedPrep Systems</h2>
-            <p className="text-xs text-slate-600">Document Workflow</p>
+            <h1 className="text-lg font-semibold">MedPrep</h1>
+            <p className="text-xs text-muted-foreground">Document Management</p>
           </div>
         </div>
       </SidebarHeader>
@@ -69,40 +126,73 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {navigationItems.map((item) => (
                 <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton isActive={currentView === item.id} onClick={() => onViewChange(item.id)}>
+                  <SidebarMenuButton isActive={activeView === item.id} onClick={() => onViewChange(item.id)}>
                     <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
+                    <span>{item.title}</span>
+                    {item.badge && (
+                      <Badge variant="secondary" className="ml-auto">
+                        {item.badge}
+                      </Badge>
+                    )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {pendingApprovals > 0 && ["management", "admin"].includes(user.role) && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Pending Actions</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => onViewChange("dashboard")}>
+                    <FileText className="h-4 w-4" />
+                    <span>Pending Approvals</span>
+                    <Badge variant="destructive" className="ml-auto">
+                      {pendingApprovals}
+                    </Badge>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
-      <SidebarFooter className="border-t p-4">
-        <div className="flex items-center space-x-3">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src="/placeholder-user.jpg" alt={user.name} />
-            <AvatarFallback>
-              {user.name
-                .split(" ")
-                .map((n) => n[0])
-                .join("")}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-slate-800 truncate">{user.name}</p>
-            <div className="flex items-center space-x-2">
-              <Badge variant="secondary" className="text-xs">
-                {user.role}
-              </Badge>
-              <p className="text-xs text-slate-600 truncate">{user.department}</p>
-            </div>
-          </div>
-        </div>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton className="w-full">
+                  <Avatar className="h-6 w-6">
+                    <AvatarFallback className="text-xs">{getUserInitials(user.name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 text-left">
+                    <p className="text-sm font-medium">{user.name}</p>
+                    <Badge className={`text-xs ${getRoleColor(user.role)}`}>{user.role}</Badge>
+                  </div>
+                  <ChevronUp className="h-4 w-4" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" className="w-[--radix-popper-anchor-width]">
+                <DropdownMenuItem>
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={logout}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
 
       <SidebarRail />

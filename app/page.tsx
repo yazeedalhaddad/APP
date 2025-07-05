@@ -1,25 +1,42 @@
 "use client"
+
+import { useEffect } from "react"
+import { useAppStore } from "@/stores/app-store"
 import { LoginScreen } from "@/components/login-screen"
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { useAppStore } from "@/stores/app-store"
-import { Skeleton } from "@/components/ui/skeleton"
 
-export default function Home() {
-  const { user, isAuthenticated, isLoading } = useAppStore()
+export default function HomePage() {
+  const { isAuthenticated, user, token } = useAppStore()
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="space-y-4 w-96">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-8 w-full" />
-        </div>
-      </div>
-    )
-  }
+  useEffect(() => {
+    // Initialize the app by checking authentication status
+    if (token && !user) {
+      // Token exists but user data is not loaded, verify token
+      fetch("/api/auth/me", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+        .then((response) => response.json())
+        .then((result) => {
+          if (result.success) {
+            useAppStore.setState({
+              user: result.data,
+              isAuthenticated: true,
+            })
+          } else {
+            // Invalid token, clear it
+            useAppStore.getState().logout()
+          }
+        })
+        .catch(() => {
+          // Network error or invalid response, clear token
+          useAppStore.getState().logout()
+        })
+    }
+  }, [token, user])
 
-  if (!isAuthenticated || !user) {
+  if (!isAuthenticated) {
     return <LoginScreen />
   }
 

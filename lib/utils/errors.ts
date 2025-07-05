@@ -1,8 +1,8 @@
 export class AppError extends Error {
-  public statusCode: number
-  public isOperational: boolean
+  public readonly statusCode: number
+  public readonly isOperational: boolean
 
-  constructor(message: string, statusCode: number, isOperational = true) {
+  constructor(message: string, statusCode = 500, isOperational = true) {
     super(message)
     this.statusCode = statusCode
     this.isOperational = isOperational
@@ -24,7 +24,7 @@ export class AuthenticationError extends AppError {
 }
 
 export class AuthorizationError extends AppError {
-  constructor(message = "Access denied") {
+  constructor(message = "Insufficient permissions") {
     super(message, 403)
   }
 }
@@ -38,11 +38,5 @@ export class NotFoundError extends AppError {
 export class ConflictError extends AppError {
   constructor(message: string) {
     super(message, 409)
-  }
-}
-
-export class InternalServerError extends AppError {
-  constructor(message = "Internal server error") {
-    super(message, 500)
   }
 }

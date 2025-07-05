@@ -1,6 +1,5 @@
 import type { NextRequest } from "next/server"
 import { z } from "zod"
-import { ValidationError } from "@/lib/utils/errors"
 
 export async function validateBody<T>(request: NextRequest, schema: z.ZodSchema<T>): Promise<T> {
   try {
@@ -8,23 +7,22 @@ export async function validateBody<T>(request: NextRequest, schema: z.ZodSchema<
     return schema.parse(body)
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const errorMessages = error.errors.map((err) => `${err.path.join(".")}: ${err.message}`).join(", ")
-      throw new ValidationError(`Validation failed: ${errorMessages}`)
+      const errorMessage = error.errors.map((err) => `${err.path.join(".")}: ${err.message}`).join(", ")
+      throw new Error(`Validation error: ${errorMessage}`)
     }
-    throw new ValidationError("Invalid request body")
+    throw new Error("Invalid request body")
   }
 }
 
-export function validateQuery<T>(request: NextRequest, schema: z.ZodSchema<T>): T {
+export function validateQuery<T>(searchParams: URLSearchParams, schema: z.ZodSchema<T>): T {
   try {
-    const { searchParams } = new URL(request.url)
-    const queryObject = Object.fromEntries(searchParams.entries())
-    return schema.parse(queryObject)
+    const params = Object.fromEntries(searchParams.entries())
+    return schema.parse(params)
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const errorMessages = error.errors.map((err) => `${err.path.join(".")}: ${err.message}`).join(", ")
-      throw new ValidationError(`Query validation failed: ${errorMessages}`)
+      const errorMessage = error.errors.map((err) => `${err.path.join(".")}: ${err.message}`).join(", ")
+      throw new Error(`Validation error: ${errorMessage}`)
     }
-    throw new ValidationError("Invalid query parameters")
+    throw new Error("Invalid query parameters")
   }
 }

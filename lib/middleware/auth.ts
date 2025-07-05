@@ -1,8 +1,7 @@
 import jwt from "jsonwebtoken"
 import type { NextRequest } from "next/server"
 import { getUserById } from "@/lib/database"
-
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"
+import { config } from "@/lib/config"
 
 export interface AuthResult {
   success: boolean
@@ -11,53 +10,50 @@ export interface AuthResult {
 }
 
 export function generateToken(userId: string): string {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "24h" })
+  return jwt.sign({ userId }, config.auth.jwtSecret, { expiresIn: "24h" })
 }
 
 export function verifyToken(token: string): { userId: string } | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
+    const decoded = jwt.verify(token, config.auth.jwtSecret) as { userId: string }
     return decoded
   } catch {
     return null
   }
 }
 
-export async function requireAuth(request: NextRequest): Promise<AuthResult> {
+export async function requireAuth(request: NextRequest): Promise<any> {
   try {
     const authHeader = request.headers.get("authorization")
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return { success: false, error: "No token provided" }
+      throw new Error("No token provided")
     }
 
     const token = authHeader.substring(7)
     const decoded = verifyToken(token)
     if (!decoded) {
-      return { success: false, error: "Invalid token" }
+      throw new Error("Invalid token")
     }
 
     const user = await getUserById(decoded.userId)
     if (!user) {
-      return { success: false, error: "User not found" }
+      throw new Error("User not found")
     }
 
-    return { success: true, user }
+    return user
   } catch (error) {
-    return { success: false, error: "Authentication failed" }
+    throw new Error("Authentication failed")
   }
 }
 
-export async function requireRole(request: NextRequest, allowedRoles: string[]): Promise<AuthResult> {
-  const authResult = await requireAuth(request)
-  if (!authResult.success) {
-    return authResult
+export async function requireRole(request: NextRequest, allowedRoles: string[]): Promise<any> {
+  const user = await requireAuth(request)
+
+  if (!allowedRoles.includes(user.role)) {
+    throw new Error("Insufficient permissions")
   }
 
-  if (!allowedRoles.includes(authResult.user.role)) {
-    return { success: false, error: "Insufficient permissions" }
-  }
-
-  return authResult
+  return user
 }
 
 export function getClientIP(request: NextRequest): string {
