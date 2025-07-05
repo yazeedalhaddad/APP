@@ -1,20 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAuth } from "@/lib/middleware"
-import { getDocumentVersions } from "@/lib/database"
+import { requireAuth } from "@/lib/middleware/auth"
+import { documentService } from "@/lib/services/document-service"
+import { ApiResponseBuilder } from "@/lib/utils/api-response"
+import { withErrorHandler } from "@/lib/middleware/error-handler"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  try {
-    await requireAuth(request)
-    const versions = await getDocumentVersions(params.id)
+async function getDocumentVersionsHandler(request: NextRequest, { params }: { params: { id: string } }) {
+  await requireAuth(request)
+  const versions = await documentService.getDocumentVersions(params.id)
 
-    return NextResponse.json({
-      success: true,
-      data: versions,
-    })
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to fetch document versions" },
-      { status: error instanceof Error && error.message === "Authentication required" ? 401 : 500 },
-    )
-  }
+  return NextResponse.json(ApiResponseBuilder.success(versions))
 }
+
+export const GET = withErrorHandler(getDocumentVersionsHandler)

@@ -1,24 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAuth } from "@/lib/middleware"
-import { getMergeRequestById } from "@/lib/database"
+import { requireAuth } from "@/lib/middleware/auth"
+import { mergeRequestService } from "@/lib/services/merge-request-service"
+import { ApiResponseBuilder } from "@/lib/utils/api-response"
+import { withErrorHandler } from "@/lib/middleware/error-handler"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  try {
-    await requireAuth(request)
-    const mergeRequest = await getMergeRequestById(params.id)
+async function getMergeRequestHandler(request: NextRequest, { params }: { params: { id: string } }) {
+  await requireAuth(request)
+  const mergeRequest = await mergeRequestService.getMergeRequestById(params.id)
 
-    if (!mergeRequest) {
-      return NextResponse.json({ success: false, error: "Merge request not found" }, { status: 404 })
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: mergeRequest,
-    })
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to fetch merge request" },
-      { status: error instanceof Error && error.message === "Authentication required" ? 401 : 500 },
-    )
-  }
+  return NextResponse.json(ApiResponseBuilder.success(mergeRequest))
 }
+
+export const GET = withErrorHandler(getMergeRequestHandler)

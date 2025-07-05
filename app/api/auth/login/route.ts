@@ -1,49 +1,19 @@
 import { type NextRequest, NextResponse } from "next/server"
-import bcrypt from "bcryptjs"
-import { getUserByEmail, createAuditLog } from "@/lib/database"
-import { generateToken, getClientIP, getUserAgent } from "@/lib/middleware"
+import { userService } from "@/lib/services/user-service"
+import { validateBody } from "@/lib/middleware/validation"
+import { getClientIP, getUserAgent } from "@/lib/middleware/auth"
+import { loginSchema } from "@/lib/validation/schemas"
+import { ApiResponseBuilder } from "@/lib/utils/api-response"
+import { withErrorHandler } from "@/lib/middleware/error-handler"
 
-export async function POST(request: NextRequest) {
-  try {
-    const { email, password } = await request.json()
+async function loginHandler(request: NextRequest) {
+  const credentials = await validateBody(request, loginSchema)
+  const ipAddress = getClientIP(request)
+  const userAgent = getUserAgent(request)
 
-    if (!email || !password) {
-      return NextResponse.json({ success: false, error: "Email and password are required" }, { status: 400 })
-    }
+  const result = await userService.login(credentials, ipAddress, userAgent)
 
-    const user = await getUserByEmail(email)
-    if (!user) {
-      return NextResponse.json({ success: false, error: "Invalid credentials" }, { status: 401 })
-    }
-
-    const isValidPassword = await bcrypt.compare(password, user.password)
-    if (!isValidPassword) {
-      return NextResponse.json({ success: false, error: "Invalid credentials" }, { status: 401 })
-    }
-
-    const token = generateToken(user.id)
-
-    // Create audit log
-    await createAuditLog({
-      user_id: user.id,
-      action: "USER_LOGIN",
-      details: { email },
-      ip_address: getClientIP(request),
-      user_agent: getUserAgent(request),
-    })
-
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        user: userWithoutPassword,
-        token,
-      },
-    })
-  } catch (error) {
-    console.error("Login error:", error)
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
-  }
+  return NextResponse.json(ApiResponseBuilder.success(result, "Login successful"))
 }
+
+export const POST = withErrorHandler(loginHandler)

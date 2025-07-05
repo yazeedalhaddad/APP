@@ -1,40 +1,27 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAuth, getClientIP, getUserAgent } from "@/lib/middleware"
-import { getDocumentVersion, createAuditLog } from "@/lib/database"
+import { requireAuth, getClientIP, getUserAgent } from "@/lib/middleware/auth"
+import { documentService } from "@/lib/services/document-service"
+import { ApiResponseBuilder } from "@/lib/utils/api-response"
+import { withErrorHandler } from "@/lib/middleware/error-handler"
+import { ValidationError } from "@/lib/utils/errors"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string; version: string } }) {
-  try {
-    const user = await requireAuth(request)
-    const versionNumber = Number.parseInt(params.version)
+async function getDocumentVersionHandler(
+  request: NextRequest,
+  { params }: { params: { id: string; version: string } },
+) {
+  const user = await requireAuth(request)
+  const versionNumber = Number.parseInt(params.version)
 
-    if (isNaN(versionNumber)) {
-      return NextResponse.json({ success: false, error: "Invalid version number" }, { status: 400 })
-    }
-
-    const version = await getDocumentVersion(params.id, versionNumber)
-
-    if (!version) {
-      return NextResponse.json({ success: false, error: "Document version not found" }, { status: 404 })
-    }
-
-    // Create audit log
-    await createAuditLog({
-      user_id: user.id,
-      action: "DOCUMENT_VERSION_VIEWED",
-      document_id: params.id,
-      details: { version_number: versionNumber },
-      ip_address: getClientIP(request),
-      user_agent: getUserAgent(request),
-    })
-
-    return NextResponse.json({
-      success: true,
-      data: version,
-    })
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to fetch document version" },
-      { status: error instanceof Error && error.message === "Authentication required" ? 401 : 500 },
-    )
+  if (isNaN(versionNumber)) {
+    throw new ValidationError("Invalid version number")
   }
+
+  const ipAddress = getClientIP(request)
+  const userAgent = getUserAgent(request)
+
+  const version = await documentService.getDocumentVersion(params.id, versionNumber, user.id, ipAddress, userAgent)
+
+  return NextResponse.json(ApiResponseBuilder.success(version))
 }
+
+export const GET = withErrorHandler(getDocumentVersionHandler)

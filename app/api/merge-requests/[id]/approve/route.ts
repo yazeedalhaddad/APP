@@ -1,44 +1,23 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireRole, getClientIP, getUserAgent } from "@/lib/middleware"
-import { updateMergeRequestStatus, createAuditLog } from "@/lib/database"
+import { requireRole, getClientIP, getUserAgent } from "@/lib/middleware/auth"
+import { mergeRequestService } from "@/lib/services/merge-request-service"
+import { ApiResponseBuilder } from "@/lib/utils/api-response"
+import { withErrorHandler } from "@/lib/middleware/error-handler"
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
-  try {
-    const user = await requireRole(request, ["management", "admin"])
+async function approveMergeRequestHandler(request: NextRequest, { params }: { params: { id: string } }) {
+  const user = await requireRole(request, ["management", "admin"])
+  const ipAddress = getClientIP(request)
+  const userAgent = getUserAgent(request)
 
-    const mergeRequest = await updateMergeRequestStatus(params.id, "approved", user.id)
+  const mergeRequest = await mergeRequestService.approveMergeRequest(
+    params.id,
+    user.id,
+    user.name,
+    ipAddress,
+    userAgent,
+  )
 
-    if (!mergeRequest) {
-      return NextResponse.json({ success: false, error: "Merge request not found" }, { status: 404 })
-    }
-
-    // Create audit log
-    await createAuditLog({
-      user_id: user.id,
-      action: "MERGE_REQUEST_APPROVED",
-      merge_request_id: mergeRequest.id,
-      details: { approver: user.name },
-      ip_address: getClientIP(request),
-      user_agent: getUserAgent(request),
-    })
-
-    return NextResponse.json({
-      success: true,
-      data: mergeRequest,
-      message: "Merge request approved successfully",
-    })
-  } catch (error) {
-    console.error("Approve merge request error:", error)
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to approve merge request" },
-      {
-        status:
-          error instanceof Error && error.message === "Authentication required"
-            ? 401
-            : error instanceof Error && error.message === "Insufficient permissions"
-              ? 403
-              : 500,
-      },
-    )
-  }
+  return NextResponse.json(ApiResponseBuilder.success(mergeRequest, "Merge request approved successfully"))
 }
+
+export const POST = withErrorHandler(approveMergeRequestHandler)

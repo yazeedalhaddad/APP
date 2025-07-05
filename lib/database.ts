@@ -49,6 +49,36 @@ export async function createUser(userData: {
   return result[0]
 }
 
+export async function updateUser(id: string, updates: any) {
+  const setParts = []
+  const values = []
+
+  Object.keys(updates).forEach((key) => {
+    if (updates[key] !== undefined) {
+      setParts.push(`${key} = $${setParts.length + 1}`)
+      values.push(updates[key])
+    }
+  })
+
+  if (setParts.length === 0) return null
+
+  const result = await sql`
+    UPDATE users 
+    SET ${sql.unsafe(setParts.join(", "))}, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING id, name, email, role, department, status, created_at, updated_at
+  `
+  return result[0] || null
+}
+
+export async function deleteUser(id: string) {
+  await sql`
+    UPDATE users 
+    SET status = 'inactive', updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+  `
+}
+
 // Document management functions
 export async function getDocuments(
   filters: {
@@ -143,6 +173,39 @@ export async function createDocument(documentData: {
   return document
 }
 
+export async function updateDocument(id: string, updates: any) {
+  const setParts = []
+  Object.keys(updates).forEach((key) => {
+    if (updates[key] !== undefined) {
+      setParts.push(`${key} = $${setParts.length + 1}`)
+    }
+  })
+
+  if (setParts.length === 0) return null
+
+  const result = await sql`
+    UPDATE documents 
+    SET ${sql.unsafe(setParts.join(", "))}, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *
+  `
+  return result[0] || null
+}
+
+export async function deleteDocument(id: string) {
+  await sql`DELETE FROM documents WHERE id = ${id}`
+}
+
+export async function searchDocuments(query: string) {
+  return await sql`
+    SELECT d.*, u.name as owner_name, u.email as owner_email
+    FROM documents d
+    LEFT JOIN users u ON d.owner_id = u.id
+    WHERE to_tsvector('english', d.title || ' ' || COALESCE(d.description, '')) @@ plainto_tsquery('english', ${query})
+    ORDER BY d.updated_at DESC
+  `
+}
+
 // Draft management functions
 export async function getDrafts(
   filters: {
@@ -211,34 +274,13 @@ export async function createDraft(draftData: {
   return result[0]
 }
 
-export async function updateDraft(
-  id: string,
-  updates: {
-    name?: string
-    description?: string
-    status?: string
-    file_path?: string
-  },
-) {
+export async function updateDraft(id: string, updates: any) {
   const setParts = []
-  const values = []
-
-  if (updates.name !== undefined) {
-    setParts.push(`name = $${setParts.length + 1}`)
-    values.push(updates.name)
-  }
-  if (updates.description !== undefined) {
-    setParts.push(`description = $${setParts.length + 1}`)
-    values.push(updates.description)
-  }
-  if (updates.status !== undefined) {
-    setParts.push(`status = $${setParts.length + 1}`)
-    values.push(updates.status)
-  }
-  if (updates.file_path !== undefined) {
-    setParts.push(`file_path = $${setParts.length + 1}`)
-    values.push(updates.file_path)
-  }
+  Object.keys(updates).forEach((key) => {
+    if (updates[key] !== undefined) {
+      setParts.push(`${key} = $${setParts.length + 1}`)
+    }
+  })
 
   if (setParts.length === 0) return null
 
@@ -249,6 +291,10 @@ export async function updateDraft(
     RETURNING *
   `
   return result[0] || null
+}
+
+export async function deleteDraft(id: string) {
+  await sql`DELETE FROM drafts WHERE id = ${id}`
 }
 
 // Merge request functions
@@ -319,8 +365,8 @@ export async function updateMergeRequestStatus(id: string, status: string, userI
   const result = await sql`
     UPDATE merge_requests 
     SET status = ${status}, 
-        ${sql.unsafe(timestamp)} = CURRENT_TIMESTAMP,
-        ${status === "rejected" && rejectionReason ? sql`rejection_reason = ${rejectionReason}` : sql``}
+        ${sql.unsafe(timestamp)} = CURRENT_TIMESTAMP
+        ${status === "rejected" && rejectionReason ? sql`, rejection_reason = ${rejectionReason}` : sql``}
     WHERE id = ${id}
     RETURNING *
   `
@@ -465,8 +511,8 @@ export async function getDashboardMetrics({
   offset?: number
 } = {}) {
   let query = sql`
-    SELECT *
-    FROM dashboard_metrics
+    SELECT * 
+    FROM dashboard_metrics 
     WHERE 1 = 1
   `
 

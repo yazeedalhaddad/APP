@@ -1,25 +1,17 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAuth, getClientIP, getUserAgent } from "@/lib/middleware"
-import { createAuditLog } from "@/lib/database"
+import { requireAuth, getClientIP, getUserAgent } from "@/lib/middleware/auth"
+import { userService } from "@/lib/services/user-service"
+import { ApiResponseBuilder } from "@/lib/utils/api-response"
+import { withErrorHandler } from "@/lib/middleware/error-handler"
 
-export async function POST(request: NextRequest) {
-  try {
-    const user = await requireAuth(request)
+async function logoutHandler(request: NextRequest) {
+  const user = await requireAuth(request)
+  const ipAddress = getClientIP(request)
+  const userAgent = getUserAgent(request)
 
-    // Create audit log
-    await createAuditLog({
-      user_id: user.id,
-      action: "USER_LOGOUT",
-      details: { email: user.email },
-      ip_address: getClientIP(request),
-      user_agent: getUserAgent(request),
-    })
+  await userService.logout(user.id, user.email, ipAddress, userAgent)
 
-    return NextResponse.json({
-      success: true,
-      message: "Logged out successfully",
-    })
-  } catch (error) {
-    return NextResponse.json({ success: false, error: "Logout failed" }, { status: 500 })
-  }
+  return NextResponse.json(ApiResponseBuilder.success(null, "Logged out successfully"))
 }
+
+export const POST = withErrorHandler(logoutHandler)
