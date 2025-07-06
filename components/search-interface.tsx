@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -8,8 +8,11 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Search, Filter, CalendarIcon, Eye, Download } from "lucide-react"
 import { format } from "date-fns"
+import { useAppStore } from "@/stores/app-store"
+import type { Document } from "@/types/document" // Assuming Document type is declared here
 
 interface User {
   id: string
@@ -21,82 +24,56 @@ interface User {
 
 interface SearchInterfaceProps {
   user: User
-  onDocumentSelect: (document: any) => void
+  onDocumentSelect: (document: Document) => void
 }
 
 export function SearchInterface({ user, onDocumentSelect }: SearchInterfaceProps) {
+  const { documents, isLoading, fetchDocuments, searchDocuments } = useAppStore()
   const [searchQuery, setSearchQuery] = useState("")
   const [dateFrom, setDateFrom] = useState<Date>()
   const [dateTo, setDateTo] = useState<Date>()
   const [documentType, setDocumentType] = useState("all-types")
   const [department, setDepartment] = useState("all-departments")
-  const [status, setStatus] = useState("all-statuses")
+  const [classification, setClassification] = useState("all-classifications")
 
-  const searchResults = [
-    {
-      id: "DOC-2024-001",
-      title: "Batch Analysis Report - Lot #4815",
-      type: "Lab Result",
-      department: "Laboratory",
-      author: "Dr. Emily Rodriguez",
-      date: "2024-12-10",
-      status: "Pending Approval",
-      description: "Quality analysis results for pharmaceutical batch 4815 including purity and contamination tests.",
-    },
-    {
-      id: "DOC-2024-002",
-      title: "Production Protocol Update v2.1",
-      type: "Protocol",
-      department: "Production",
-      author: "Mike Chen",
-      date: "2024-12-09",
-      status: "Under Review",
-      description: "Updated manufacturing protocol incorporating new safety guidelines and efficiency improvements.",
-    },
-    {
-      id: "DOC-2024-003",
-      title: "Quality Assurance Checklist Revision",
-      type: "QA Document",
-      department: "Quality Control",
-      author: "Sarah Kim",
-      date: "2024-12-08",
-      status: "Approved",
-      description: "Revised quality assurance checklist with updated compliance requirements.",
-    },
-    {
-      id: "DOC-2024-004",
-      title: "Equipment Calibration Log - HPLC-001",
-      type: "Calibration Log",
-      department: "Laboratory",
-      author: "Dr. Emily Rodriguez",
-      date: "2024-12-07",
-      status: "Completed",
-      description: "Weekly calibration verification for HPLC equipment including accuracy and precision tests.",
-    },
-    {
-      id: "DOC-2024-005",
-      title: "Stability Study Results Q4-2024",
-      type: "Study Report",
-      department: "Laboratory",
-      author: "Dr. Michael Torres",
-      date: "2024-12-06",
-      status: "Archived",
-      description: "Quarterly stability study results for active pharmaceutical ingredients.",
-    },
-  ]
+  useEffect(() => {
+    // Load initial documents
+    fetchDocuments()
+  }, [fetchDocuments])
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Pending Approval":
-        return "bg-orange-100 text-orange-800"
-      case "Under Review":
+  const handleSearch = () => {
+    if (searchQuery.trim()) {
+      searchDocuments(searchQuery.trim())
+    } else {
+      // Apply filters without search query
+      const filters: any = {}
+
+      if (classification !== "all-classifications") {
+        filters.classification = classification
+      }
+
+      fetchDocuments(filters)
+    }
+  }
+
+  const handleClearFilters = () => {
+    setSearchQuery("")
+    setDateFrom(undefined)
+    setDateTo(undefined)
+    setDocumentType("all-types")
+    setDepartment("all-departments")
+    setClassification("all-classifications")
+    fetchDocuments()
+  }
+
+  const getStatusColor = (classification: string) => {
+    switch (classification) {
+      case "confidential":
+        return "bg-red-100 text-red-800"
+      case "internal":
         return "bg-blue-100 text-blue-800"
-      case "Approved":
+      case "public":
         return "bg-green-100 text-green-800"
-      case "Completed":
-        return "bg-green-100 text-green-800"
-      case "Archived":
-        return "bg-slate-100 text-slate-800"
       default:
         return "bg-slate-100 text-slate-800"
     }
@@ -128,10 +105,11 @@ export function SearchInterface({ user, onDocumentSelect }: SearchInterfaceProps
                 placeholder="Search documents by title, content, or ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && handleSearch()}
                 className="pl-10 h-11"
               />
             </div>
-            <Button className="h-11 px-6">
+            <Button className="h-11 px-6" onClick={handleSearch} disabled={isLoading}>
               <Search className="h-4 w-4 mr-2" />
               Search
             </Button>
@@ -147,11 +125,10 @@ export function SearchInterface({ user, onDocumentSelect }: SearchInterfaceProps
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all-types">All Types</SelectItem>
-                  <SelectItem value="lab-result">Lab Result</SelectItem>
-                  <SelectItem value="protocol">Protocol</SelectItem>
-                  <SelectItem value="qa-document">QA Document</SelectItem>
-                  <SelectItem value="calibration-log">Calibration Log</SelectItem>
-                  <SelectItem value="study-report">Study Report</SelectItem>
+                  <SelectItem value="pdf">PDF</SelectItem>
+                  <SelectItem value="word">Word Document</SelectItem>
+                  <SelectItem value="excel">Excel Spreadsheet</SelectItem>
+                  <SelectItem value="powerpoint">PowerPoint</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -166,25 +143,23 @@ export function SearchInterface({ user, onDocumentSelect }: SearchInterfaceProps
                   <SelectItem value="all-departments">All Departments</SelectItem>
                   <SelectItem value="laboratory">Laboratory</SelectItem>
                   <SelectItem value="production">Production</SelectItem>
-                  <SelectItem value="quality-control">Quality Control</SelectItem>
                   <SelectItem value="management">Management</SelectItem>
+                  <SelectItem value="general">General</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Status</label>
-              <Select value={status} onValueChange={setStatus}>
+              <label className="text-sm font-medium text-slate-700">Classification</label>
+              <Select value={classification} onValueChange={setClassification}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All Statuses" />
+                  <SelectValue placeholder="All Classifications" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all-statuses">All Statuses</SelectItem>
-                  <SelectItem value="pending">Pending Approval</SelectItem>
-                  <SelectItem value="review">Under Review</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
+                  <SelectItem value="all-classifications">All Classifications</SelectItem>
+                  <SelectItem value="public">Public</SelectItem>
+                  <SelectItem value="internal">Internal</SelectItem>
+                  <SelectItem value="confidential">Confidential</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -221,11 +196,11 @@ export function SearchInterface({ user, onDocumentSelect }: SearchInterfaceProps
           </div>
 
           <div className="flex justify-between items-center">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleClearFilters}>
               <Filter className="h-4 w-4 mr-2" />
               Clear Filters
             </Button>
-            <p className="text-sm text-slate-600">{searchResults.length} documents found</p>
+            <p className="text-sm text-slate-600">{documents.length} documents found</p>
           </div>
         </CardContent>
       </Card>
@@ -237,36 +212,60 @@ export function SearchInterface({ user, onDocumentSelect }: SearchInterfaceProps
           <CardDescription>Documents matching your search criteria</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {searchResults.map((doc, index) => (
-            <div key={index} className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <h4 className="font-medium text-slate-800">{doc.title}</h4>
-                    <Badge className={getStatusColor(doc.status)}>{doc.status}</Badge>
+          {isLoading ? (
+            // Loading skeleton
+            Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="p-4 border border-slate-200 rounded-lg">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                    <Skeleton className="h-3 w-1/4" />
                   </div>
-                  <p className="text-sm text-slate-600 mb-2">{doc.description}</p>
-                  <div className="flex items-center space-x-4 text-xs text-slate-500">
-                    <span>ID: {doc.id}</span>
-                    <span>Type: {doc.type}</span>
-                    <span>Department: {doc.department}</span>
-                    <span>Author: {doc.author}</span>
-                    <span>Date: {doc.date}</span>
+                  <div className="flex space-x-2">
+                    <Skeleton className="h-8 w-16" />
+                    <Skeleton className="h-8 w-20" />
                   </div>
-                </div>
-                <div className="flex items-center space-x-2 ml-4">
-                  <Button size="sm" variant="outline" onClick={() => onDocumentSelect(doc)}>
-                    <Eye className="h-4 w-4 mr-1" />
-                    View
-                  </Button>
-                  <Button size="sm" variant="outline">
-                    <Download className="h-4 w-4 mr-1" />
-                    Download
-                  </Button>
                 </div>
               </div>
+            ))
+          ) : documents.length > 0 ? (
+            documents.map((doc) => (
+              <div key={doc.id} className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <h4 className="font-medium text-slate-800">{doc.title}</h4>
+                      <Badge className={getStatusColor(doc.classification)}>{doc.classification}</Badge>
+                    </div>
+                    <p className="text-sm text-slate-600 mb-2">{doc.description || "No description available"}</p>
+                    <div className="flex items-center space-x-4 text-xs text-slate-500">
+                      <span>ID: {doc.id}</span>
+                      <span>Type: {doc.file_type}</span>
+                      <span>Owner: {doc.owner_name || "Unknown"}</span>
+                      <span>Updated: {new Date(doc.updated_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 ml-4">
+                    <Button size="sm" variant="outline" onClick={() => onDocumentSelect(doc)}>
+                      <Eye className="h-4 w-4 mr-1" />
+                      View
+                    </Button>
+                    <Button size="sm" variant="outline">
+                      <Download className="h-4 w-4 mr-1" />
+                      Download
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-12 text-slate-500">
+              <Search className="h-16 w-16 mx-auto mb-4 text-slate-300" />
+              <h3 className="text-lg font-medium mb-2">No documents found</h3>
+              <p className="text-sm">Try adjusting your search criteria or filters</p>
             </div>
-          ))}
+          )}
         </CardContent>
       </Card>
     </div>

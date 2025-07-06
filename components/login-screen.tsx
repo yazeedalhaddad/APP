@@ -11,7 +11,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Building2 } from "lucide-react"
 import { useAppStore } from "@/stores/app-store"
 
-export function LoginScreen() {
+interface LoginScreenProps {
+  onShowSignup: () => void
+}
+
+export function LoginScreen({ onShowSignup }: LoginScreenProps) {
   const { login, isLoading, error, clearError } = useAppStore()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -87,14 +91,18 @@ export function LoginScreen() {
             </Button>
           </form>
 
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600 mb-2">Demo Accounts:</p>
-            <div className="space-y-1 text-xs text-gray-500">
-              <div>Admin: admin@medprep.com / Admin123!@#</div>
-              <div>Manager: sarah.johnson@medprep.com / Manager123!@#</div>
-              <div>Production: michael.chen@medprep.com / Production123!@#</div>
-              <div>Lab: emily.rodriguez@medprep.com / Lab123!@#</div>
-            </div>
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              Don't have an account?{" "}
+              <Button
+                variant="link"
+                onClick={onShowSignup}
+                disabled={isLoading}
+                className="p-0 h-auto text-blue-600 hover:text-blue-800"
+              >
+                Sign up
+              </Button>
+            </p>
           </div>
         </CardContent>
       </Card>

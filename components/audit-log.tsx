@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Activity,
   Search,
@@ -22,6 +23,7 @@ import {
   Filter,
 } from "lucide-react"
 import { format } from "date-fns"
+import { useAppStore } from "@/stores/app-store"
 
 interface User {
   id: string
@@ -36,131 +38,72 @@ interface AuditLogProps {
 }
 
 export function AuditLog({ user }: AuditLogProps) {
+  const { auditLogs, isLoading, fetchAuditLogs } = useAppStore()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedUser, setSelectedUser] = useState("all")
   const [selectedAction, setSelectedAction] = useState("all")
   const [dateFrom, setDateFrom] = useState<Date>()
   const [dateTo, setDateTo] = useState<Date>()
 
-  const auditEntries = [
-    {
-      id: "AUD-001",
-      timestamp: "2024-12-10 09:15:23",
-      user: "Dr. Sarah Johnson",
-      userEmail: "sarah.johnson@medprep.com",
-      action: "Document Approved",
-      target: "DOC-2024-001 - Batch Analysis Report",
-      ipAddress: "192.168.1.45",
-      userAgent: "Chrome 120.0.0.0",
-      details: "Approved batch analysis report for Lot #4815",
-      severity: "Normal",
-    },
-    {
-      id: "AUD-002",
-      timestamp: "2024-12-10 08:45:12",
-      user: "Mike Chen",
-      userEmail: "mike.chen@medprep.com",
-      action: "Document Uploaded",
-      target: "DOC-2024-005 - Production Report",
-      ipAddress: "192.168.1.67",
-      userAgent: "Chrome 120.0.0.0",
-      details: "Uploaded weekly production report for review",
-      severity: "Normal",
-    },
-    {
-      id: "AUD-003",
-      timestamp: "2024-12-10 08:30:45",
-      user: "Dr. Emily Rodriguez",
-      userEmail: "emily.rodriguez@medprep.com",
-      action: "Document Modified",
-      target: "DOC-2024-003 - Lab Protocol",
-      ipAddress: "192.168.1.89",
-      userAgent: "Chrome 120.0.0.0",
-      details: "Updated laboratory testing protocol with new parameters",
-      severity: "Normal",
-    },
-    {
-      id: "AUD-004",
-      timestamp: "2024-12-10 07:22:18",
-      user: "System Administrator",
-      userEmail: "admin@medprep.com",
-      action: "User Created",
-      target: "USR-006 - Dr. Michael Torres",
-      ipAddress: "192.168.1.10",
-      userAgent: "Chrome 120.0.0.0",
-      details: "Created new user account for Laboratory department",
-      severity: "High",
-    },
-    {
-      id: "AUD-005",
-      timestamp: "2024-12-09 16:45:33",
-      user: "Sarah Kim",
-      userEmail: "sarah.kim@medprep.com",
-      action: "Document Rejected",
-      target: "DOC-2024-004 - QC Report",
-      ipAddress: "192.168.1.78",
-      userAgent: "Chrome 120.0.0.0",
-      details: "Rejected QC report due to incomplete data sections",
-      severity: "Normal",
-    },
-    {
-      id: "AUD-006",
-      timestamp: "2024-12-09 15:30:21",
-      user: "Unknown User",
-      userEmail: "j.smith@medprep.com",
-      action: "Failed Login",
-      target: "Login System",
-      ipAddress: "203.45.67.89",
-      userAgent: "Chrome 119.0.0.0",
-      details: "Multiple failed login attempts detected",
-      severity: "Critical",
-    },
-    {
-      id: "AUD-007",
-      timestamp: "2024-12-09 14:15:07",
-      user: "Dr. Sarah Johnson",
-      userEmail: "sarah.johnson@medprep.com",
-      action: "Document Downloaded",
-      target: "DOC-2024-002 - Compliance Report",
-      ipAddress: "192.168.1.45",
-      userAgent: "Chrome 120.0.0.0",
-      details: "Downloaded compliance report for external audit",
-      severity: "Normal",
-    },
-    {
-      id: "AUD-008",
-      timestamp: "2024-12-09 13:45:55",
-      user: "Mike Chen",
-      userEmail: "mike.chen@medprep.com",
-      action: "Document Sent",
-      target: "DOC-2024-006 - Production Schedule",
-      ipAddress: "192.168.1.67",
-      userAgent: "Chrome 120.0.0.0",
-      details: "Sent production schedule to Management for approval",
-      severity: "Normal",
-    },
-  ]
+  useEffect(() => {
+    // Load initial audit logs
+    fetchAuditLogs({ limit: 50 })
+  }, [fetchAuditLogs])
+
+  const handleSearch = () => {
+    const filters: any = { limit: 50 }
+
+    if (selectedUser !== "all") {
+      filters.user_id = selectedUser
+    }
+
+    if (selectedAction !== "all") {
+      filters.action = selectedAction
+    }
+
+    if (dateFrom) {
+      filters.start_date = dateFrom.toISOString()
+    }
+
+    if (dateTo) {
+      filters.end_date = dateTo.toISOString()
+    }
+
+    fetchAuditLogs(filters)
+  }
+
+  const handleClearFilters = () => {
+    setSearchQuery("")
+    setSelectedUser("all")
+    setSelectedAction("all")
+    setDateFrom(undefined)
+    setDateTo(undefined)
+    fetchAuditLogs({ limit: 50 })
+  }
 
   const getActionIcon = (action: string) => {
     switch (action) {
-      case "Document Uploaded":
+      case "DOCUMENT_UPLOADED":
         return Upload
-      case "Document Downloaded":
+      case "DOCUMENT_DOWNLOADED":
         return Download
-      case "Document Modified":
+      case "DOCUMENT_MODIFIED":
+      case "DOCUMENT_UPDATED":
         return Edit
-      case "Document Approved":
+      case "DOCUMENT_APPROVED":
         return CheckCircle
-      case "Document Rejected":
+      case "DOCUMENT_REJECTED":
         return XCircle
-      case "Document Sent":
+      case "DOCUMENT_SENT":
+      case "MERGE_REQUEST_CREATED":
         return Send
-      case "Document Viewed":
+      case "DOCUMENT_VIEWED":
         return Eye
-      case "User Created":
+      case "USER_CREATED":
         return CheckCircle
-      case "Failed Login":
-        return XCircle
+      case "USER_LOGIN":
+      case "USER_LOGOUT":
+        return Activity
       default:
         return Activity
     }
@@ -168,29 +111,31 @@ export function AuditLog({ user }: AuditLogProps) {
 
   const getActionColor = (action: string) => {
     switch (action) {
-      case "Document Approved":
+      case "DOCUMENT_APPROVED":
         return "text-green-600"
-      case "Document Rejected":
+      case "DOCUMENT_REJECTED":
         return "text-red-600"
-      case "Failed Login":
-        return "text-red-600"
-      case "User Created":
+      case "USER_LOGIN":
+      case "USER_LOGOUT":
         return "text-blue-600"
-      case "Document Uploaded":
+      case "USER_CREATED":
+        return "text-blue-600"
+      case "DOCUMENT_UPLOADED":
         return "text-purple-600"
       default:
         return "text-slate-600"
     }
   }
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case "Critical":
+  const getSeverityColor = (action: string) => {
+    switch (action) {
+      case "USER_LOGIN_FAILED":
         return "bg-red-100 text-red-800"
-      case "High":
-        return "bg-orange-100 text-orange-800"
-      case "Normal":
+      case "USER_CREATED":
+      case "DOCUMENT_APPROVED":
         return "bg-green-100 text-green-800"
+      case "DOCUMENT_REJECTED":
+        return "bg-orange-100 text-orange-800"
       default:
         return "bg-slate-100 text-slate-800"
     }
@@ -224,7 +169,7 @@ export function AuditLog({ user }: AuditLogProps) {
                 className="pl-10"
               />
             </div>
-            <Button>
+            <Button onClick={handleSearch} disabled={isLoading}>
               <Search className="h-4 w-4 mr-2" />
               Search
             </Button>
@@ -239,11 +184,7 @@ export function AuditLog({ user }: AuditLogProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Users</SelectItem>
-                  <SelectItem value="sarah.johnson">Dr. Sarah Johnson</SelectItem>
-                  <SelectItem value="mike.chen">Mike Chen</SelectItem>
-                  <SelectItem value="emily.rodriguez">Dr. Emily Rodriguez</SelectItem>
-                  <SelectItem value="sarah.kim">Sarah Kim</SelectItem>
-                  <SelectItem value="admin">System Administrator</SelectItem>
+                  {/* Add dynamic user options based on available users */}
                 </SelectContent>
               </Select>
             </div>
@@ -256,13 +197,13 @@ export function AuditLog({ user }: AuditLogProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Actions</SelectItem>
-                  <SelectItem value="upload">Document Upload</SelectItem>
-                  <SelectItem value="download">Document Download</SelectItem>
-                  <SelectItem value="approve">Document Approval</SelectItem>
-                  <SelectItem value="reject">Document Rejection</SelectItem>
-                  <SelectItem value="modify">Document Modification</SelectItem>
-                  <SelectItem value="view">Document View</SelectItem>
-                  <SelectItem value="login">Login Activity</SelectItem>
+                  <SelectItem value="DOCUMENT_UPLOADED">Document Upload</SelectItem>
+                  <SelectItem value="DOCUMENT_DOWNLOADED">Document Download</SelectItem>
+                  <SelectItem value="DOCUMENT_APPROVED">Document Approval</SelectItem>
+                  <SelectItem value="DOCUMENT_REJECTED">Document Rejection</SelectItem>
+                  <SelectItem value="DOCUMENT_MODIFIED">Document Modification</SelectItem>
+                  <SelectItem value="DOCUMENT_VIEWED">Document View</SelectItem>
+                  <SelectItem value="USER_LOGIN">Login Activity</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -299,11 +240,11 @@ export function AuditLog({ user }: AuditLogProps) {
           </div>
 
           <div className="flex justify-between items-center">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleClearFilters}>
               <Filter className="h-4 w-4 mr-2" />
               Clear Filters
             </Button>
-            <p className="text-sm text-slate-600">{auditEntries.length} entries found</p>
+            <p className="text-sm text-slate-600">{auditLogs.length} entries found</p>
           </div>
         </CardContent>
       </Card>
@@ -318,44 +259,80 @@ export function AuditLog({ user }: AuditLogProps) {
           <CardDescription>Detailed log of all system activities</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {auditEntries.map((entry, index) => {
-            const ActionIcon = getActionIcon(entry.action)
-            return (
-              <div key={index} className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+          {isLoading ? (
+            // Loading skeleton
+            Array.from({ length: 10 }).map((_, index) => (
+              <div key={index} className="p-4 border border-slate-200 rounded-lg">
                 <div className="flex items-start space-x-4">
-                  <div className="flex-shrink-0">
-                    <div className={`p-2 rounded-lg bg-slate-100`}>
-                      <ActionIcon className={`h-4 w-4 ${getActionColor(entry.action)}`} />
+                  <Skeleton className="h-8 w-8 rounded-lg" />
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Skeleton className="h-4 w-1/3" />
+                      <Skeleton className="h-4 w-24" />
                     </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-2">
-                        <h4 className="font-medium text-slate-800">{entry.action}</h4>
-                        <Badge className={getSeverityColor(entry.severity)}>{entry.severity}</Badge>
-                      </div>
-                      <p className="text-sm text-slate-500">{entry.timestamp}</p>
-                    </div>
-                    <p className="text-sm text-slate-600 mb-2">{entry.details}</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs text-slate-500">
-                      <div>
-                        <span className="font-medium">User:</span> {entry.user}
-                      </div>
-                      <div>
-                        <span className="font-medium">Target:</span> {entry.target}
-                      </div>
-                      <div>
-                        <span className="font-medium">IP Address:</span> {entry.ipAddress}
-                      </div>
-                      <div>
-                        <span className="font-medium">User Agent:</span> {entry.userAgent}
-                      </div>
+                    <Skeleton className="h-3 w-3/4" />
+                    <div className="grid grid-cols-4 gap-4">
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-full" />
                     </div>
                   </div>
                 </div>
               </div>
-            )
-          })}
+            ))
+          ) : auditLogs.length > 0 ? (
+            auditLogs.map((entry) => {
+              const ActionIcon = getActionIcon(entry.action)
+              return (
+                <div
+                  key={entry.id}
+                  className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-start space-x-4">
+                    <div className="flex-shrink-0">
+                      <div className="p-2 rounded-lg bg-slate-100">
+                        <ActionIcon className={`h-4 w-4 ${getActionColor(entry.action)}`} />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <h4 className="font-medium text-slate-800">{entry.action.replace(/_/g, " ")}</h4>
+                          <Badge className={getSeverityColor(entry.action)}>Normal</Badge>
+                        </div>
+                        <p className="text-sm text-slate-500">{new Date(entry.timestamp).toLocaleString()}</p>
+                      </div>
+                      <p className="text-sm text-slate-600 mb-2">
+                        {entry.details?.title || entry.details?.document_title || "System activity"}
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs text-slate-500">
+                        <div>
+                          <span className="font-medium">User:</span> {entry.user_name || "System"}
+                        </div>
+                        <div>
+                          <span className="font-medium">Email:</span> {entry.user_email || "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-medium">IP Address:</span> {entry.ip_address || "Unknown"}
+                        </div>
+                        <div>
+                          <span className="font-medium">User Agent:</span>{" "}
+                          {entry.user_agent ? entry.user_agent.substring(0, 30) + "..." : "Unknown"}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })
+          ) : (
+            <div className="text-center py-12 text-slate-500">
+              <Activity className="h-16 w-16 mx-auto mb-4 text-slate-300" />
+              <h3 className="text-lg font-medium mb-2">No audit entries found</h3>
+              <p className="text-sm">No system activities match your current filters</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

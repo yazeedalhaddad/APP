@@ -6,14 +6,10 @@ INSERT INTO users (email, password_hash, first_name, last_name, role, department
 ('lab@titanium.com', '$2b$10$example_hash_lab', 'Dr. Lisa', 'Researcher', 'lab', 'R&D')
 ON CONFLICT (email) DO NOTHING;
 
--- Insert admin user (password: admin123)
+-- Insert system administrator (password will be set via the secure seeding script)
 INSERT INTO users (id, name, email, password, role, department, status) VALUES
-('550e8400-e29b-41d4-a716-446655440000', 'System Administrator', 'admin@medprep.com', '$2b$10$rOzJqZxQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ', 'admin', 'IT', 'active'),
-('550e8400-e29b-41d4-a716-446655440001', 'Dr. Sarah Johnson', 'sarah.johnson@medprep.com', '$2b$10$rOzJqZxQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ9VQZ9VQZ9VQZOzJqZxQZ', 'management', 'Management', 'active'),
-('550e8400-e29b-41d4-a716-446655440002', 'Michael Chen', 'michael.chen@medprep.com', '$2b$10$rOzJqZxQZ9VQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ', 'production', 'Production', 'active'),
-('550e8400-e29b-41d4-a716-446655440003', 'Dr. Emily Rodriguez', 'emily.rodriguez@medprep.com', '$2b$10$rOzJqZxQZ9VQZ9VQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ', 'lab', 'Laboratory', 'active'),
-('550e8400-e29b-41d4-a716-446655440004', 'James Wilson', 'james.wilson@medprep.com', '$2b$10$rOzJqZxQZ9VQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ', 'production', 'Production', 'active'),
-('550e8400-e29b-41d4-a716-446655440005', 'Dr. Lisa Park', 'lisa.park@medprep.com', '$2b$10$rOzJqZxQZ9VQZ9VQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ', 'lab', 'Laboratory', 'active');
+('550e8400-e29b-41d4-a716-446655440000', 'System Administrator', 'admin@medprep.com', '$2b$10$rOzJqZxQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ9VQZ9VQZOzJqZxQZ9VQZ', 'admin', 'IT', 'active')
+ON CONFLICT (email) DO NOTHING;
 
 -- Insert sample documents
 INSERT INTO documents (title, description, file_path, category, status, created_by) VALUES
@@ -36,7 +32,9 @@ INSERT INTO dashboard_metrics (metric_name, metric_value, metric_type, departmen
 ('Quality Score', 98.2, 'percentage', 'Quality'),
 ('Safety Incidents', 0, 'count', 'Safety'),
 ('Document Compliance', 96.8, 'percentage', 'Compliance'),
-('Lab Test Completion', 87.3, 'percentage', 'R&D');
+('Lab Test Completion', 87.3, 'percentage', 'R&D'),
+('System Initialized', 1, 'count', 'System')
+ON CONFLICT (metric_name) DO NOTHING;
 
 -- Insert document versions
 INSERT INTO document_versions (id, document_id, version_number, is_official, file_path, file_size, created_by) VALUES
