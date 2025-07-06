@@ -1,150 +1,209 @@
 import { z } from "zod"
 
-/* ----------------------------------------------------------------
-   Pagination
----------------------------------------------------------------- */
+// Base schemas
 export const paginationSchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
   offset: z.coerce.number().min(0).default(0),
 })
-export type PaginationParams = z.infer<typeof paginationSchema>
 
-/* ----------------------------------------------------------------
-   Auth
----------------------------------------------------------------- */
-export const loginSchema = z.object({
-  email: z.string().email("Invalid email format"),
-  password: z.string().min(1, "Password is required"),
-})
-export type LoginData = z.infer<typeof loginSchema>
-
-/* ----------------------------------------------------------------
-   Users
----------------------------------------------------------------- */
+// User schemas
 export const createUserSchema = z.object({
-  name: z.string().min(1, "Name is required").max(100, "Name too long"),
+  name: z.string().min(1, "Name is required"),
   email: z.string().email("Invalid email format"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   role: z.enum(["admin", "management", "production", "lab"]),
   department: z.string().min(1, "Department is required"),
 })
-export type CreateUserData = z.infer<typeof createUserSchema>
 
-export const updateUserSchema = createUserSchema
-  .omit({ password: true })
-  .partial()
-  .extend({
-    status: z.enum(["active", "inactive"]).optional(),
-  })
-export type UpdateUserData = z.infer<typeof updateUserSchema>
-
-/* ----------------------------------------------------------------
-   Documents
----------------------------------------------------------------- */
-export const createDocumentSchema = z.object({
-  title: z.string().min(1, "Title is required").max(200),
-  description: z.string().max(1000).optional(),
-  file_type: z.string().min(1, "File type is required"),
-  classification: z.enum(["public", "internal", "confidential", "restricted"]),
-  file_path: z.string().min(1, "File path is required"),
-  file_size: z.number().positive("File size must be positive"),
+export const updateUserSchema = z.object({
+  name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  role: z.enum(["admin", "management", "production", "lab"]).optional(),
+  department: z.string().min(1).optional(),
+  status: z.enum(["active", "inactive"]).optional(),
 })
-export type CreateDocumentData = z.infer<typeof createDocumentSchema>
 
-export const updateDocumentSchema = createDocumentSchema
-  .omit({
-    file_type: true,
-    file_path: true,
-    file_size: true,
-  })
-  .partial()
-export type UpdateDocumentData = z.infer<typeof updateDocumentSchema>
+export const loginSchema = z.object({
+  email: z.string().email("Invalid email format"),
+  password: z.string().min(1, "Password is required"),
+})
 
-/* Document list filters (query params) */
+// Document schemas
+export const createDocumentSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  description: z.string().optional(),
+  file_type: z.enum(["pdf", "word", "excel", "powerpoint", "text"]),
+  classification: z.string().min(1, "Classification is required"),
+  file_path: z.string().min(1, "File path is required"),
+  file_size: z.number().min(1, "File size must be greater than 0"),
+})
+
+export const updateDocumentSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().optional(),
+  classification: z.string().min(1).optional(),
+})
+
 export const documentFiltersSchema = z
   .object({
-    classification: z.enum(["public", "internal", "confidential", "restricted"]).optional(),
+    classification: z.string().optional(),
     owner_id: z.string().uuid().optional(),
-    search: z.string().max(200).optional(),
+    search: z.string().optional(),
   })
   .merge(paginationSchema)
-export type DocumentFilters = z.infer<typeof documentFiltersSchema>
 
-/* ----------------------------------------------------------------
-   Drafts
----------------------------------------------------------------- */
+// Draft schemas
 export const createDraftSchema = z.object({
   document_id: z.string().uuid("Invalid document ID"),
-  name: z.string().min(1, "Name is required").max(200),
-  description: z.string().max(1000).optional(),
+  name: z.string().min(1, "Draft name is required"),
+  description: z.string().optional(),
   base_version_id: z.string().uuid("Invalid base version ID"),
+  file_path: z.string().optional(),
 })
-export type CreateDraftData = z.infer<typeof createDraftSchema>
 
-export const updateDraftSchema = z
-  .object({
-    name: z.string().min(1).max(200).optional(),
-    description: z.string().max(1000).optional(),
-    status: z.enum(["draft", "pending", "approved", "rejected"]).optional(),
-  })
-  .partial()
-export type UpdateDraftData = z.infer<typeof updateDraftSchema>
+export const updateDraftSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
+  status: z.enum(["in_progress", "pending_approval", "approved", "rejected"]).optional(),
+  file_path: z.string().optional(),
+})
 
-/* Draft list filters */
 export const draftFiltersSchema = z
   .object({
-    status: z.enum(["draft", "pending", "approved", "rejected"]).optional(),
-    creator_id: z.string().uuid().optional(),
     document_id: z.string().uuid().optional(),
+    creator_id: z.string().uuid().optional(),
+    status: z.enum(["in_progress", "pending_approval", "approved", "rejected"]).optional(),
   })
   .merge(paginationSchema)
-export type DraftFilters = z.infer<typeof draftFiltersSchema>
 
-/* ----------------------------------------------------------------
-   Merge Requests
----------------------------------------------------------------- */
+// Merge request schemas
 export const createMergeRequestSchema = z.object({
   draft_id: z.string().uuid("Invalid draft ID"),
   approver_id: z.string().uuid("Invalid approver ID"),
-  summary: z.string().min(1, "Summary is required").max(1000),
+  summary: z.string().min(1, "Summary is required"),
 })
-export type CreateMergeRequestData = z.infer<typeof createMergeRequestSchema>
 
-export const approveMergeRequestSchema = z.object({
-  approved: z.boolean(),
-  rejection_reason: z.string().max(1000).optional(),
+export const updateMergeRequestStatusSchema = z.object({
+  status: z.enum(["approved", "rejected"]),
+  rejection_reason: z.string().optional(),
 })
-export type ApproveMergeRequestData = z.infer<typeof approveMergeRequestSchema>
 
-/* Merge-request list filters */
 export const mergeRequestFiltersSchema = z
   .object({
     status: z.enum(["pending", "approved", "rejected"]).optional(),
     approver_id: z.string().uuid().optional(),
   })
   .merge(paginationSchema)
-export type MergeRequestFilters = z.infer<typeof mergeRequestFiltersSchema>
 
-/* ----------------------------------------------------------------
-   Reports
----------------------------------------------------------------- */
+// Report schemas
 export const generateReportSchema = z.object({
-  title: z.string().min(1, "Title is required").max(200),
-  type: z.enum(["document_activity", "user_activity", "compliance", "custom"]),
+  title: z.string().min(1, "Report title is required"),
+  type: z.enum(["compliance", "activity", "document_usage", "user_activity"]),
   parameters: z.record(z.any()).optional(),
 })
-export type GenerateReportData = z.infer<typeof generateReportSchema>
 
-/* ----------------------------------------------------------------
-   Audit Logs
----------------------------------------------------------------- */
+// Audit log schemas
 export const auditLogFiltersSchema = z
   .object({
     user_id: z.string().uuid().optional(),
-    action: z.string().max(100).optional(),
+    action: z.string().optional(),
     document_id: z.string().uuid().optional(),
     start_date: z.string().datetime().optional(),
     end_date: z.string().datetime().optional(),
   })
   .merge(paginationSchema)
-export type AuditLogFilters = z.infer<typeof auditLogFiltersSchema>
+
+// Search schemas
+export const searchSchema = z
+  .object({
+    query: z.string().min(1, "Search query is required"),
+    type: z.enum(["documents", "drafts", "all"]).default("all"),
+  })
+  .merge(paginationSchema)
+
+// File upload schemas
+export const fileUploadSchema = z.object({
+  filename: z.string().min(1, "Filename is required"),
+  content_type: z.string().min(1, "Content type is required"),
+  file_size: z.number().min(1, "File size must be greater than 0"),
+})
+
+// Permission schemas
+export const documentPermissionSchema = z.object({
+  document_id: z.string().uuid("Invalid document ID"),
+  user_id: z.string().uuid("Invalid user ID"),
+  permission_type: z.enum(["read", "write", "approve"]),
+})
+
+// Dashboard schemas
+export const dashboardFiltersSchema = z.object({
+  date_range: z.enum(["7d", "30d", "90d", "1y"]).default("30d"),
+  department: z.string().optional(),
+})
+
+// Version comparison schema
+export const compareVersionsSchema = z.object({
+  version1: z.coerce.number().min(1),
+  version2: z.coerce.number().min(1),
+})
+
+// Bulk operations schemas
+export const bulkUpdateDocumentsSchema = z.object({
+  document_ids: z.array(z.string().uuid()).min(1, "At least one document ID is required"),
+  updates: updateDocumentSchema,
+})
+
+export const bulkDeleteDocumentsSchema = z.object({
+  document_ids: z.array(z.string().uuid()).min(1, "At least one document ID is required"),
+})
+
+// Export all schemas for easy importing
+export const schemas = {
+  // Base
+  pagination: paginationSchema,
+
+  // User
+  createUser: createUserSchema,
+  updateUser: updateUserSchema,
+  login: loginSchema,
+
+  // Document
+  createDocument: createDocumentSchema,
+  updateDocument: updateDocumentSchema,
+  documentFilters: documentFiltersSchema,
+
+  // Draft
+  createDraft: createDraftSchema,
+  updateDraft: updateDraftSchema,
+  draftFilters: draftFiltersSchema,
+
+  // Merge Request
+  createMergeRequest: createMergeRequestSchema,
+  updateMergeRequestStatus: updateMergeRequestStatusSchema,
+  mergeRequestFilters: mergeRequestFiltersSchema,
+
+  // Report
+  generateReport: generateReportSchema,
+
+  // Audit Log
+  auditLogFilters: auditLogFiltersSchema,
+
+  // Search
+  search: searchSchema,
+
+  // File Upload
+  fileUpload: fileUploadSchema,
+
+  // Permission
+  documentPermission: documentPermissionSchema,
+
+  // Dashboard
+  dashboardFilters: dashboardFiltersSchema,
+
+  // Version Comparison
+  compareVersions: compareVersionsSchema,
+
+  // Bulk Operations
+  bulkUpdateDocuments: bulkUpdateDocumentsSchema,
+  bulkDeleteDocuments: bulkDeleteDocumentsSchema,
+}
