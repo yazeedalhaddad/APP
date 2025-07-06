@@ -33,6 +33,8 @@ export interface UpdateUserData {
   status?: string
 }
 
+export interface RegisterUserData extends CreateUserData {}
+
 export interface LoginResult {
   user: Omit<User, "password">
   token: string
@@ -176,6 +178,43 @@ export class UserService {
       ip_address: ipAddress,
       user_agent: userAgent,
     })
+  }
+
+  /**
+   * Public “self-service” registration that:
+   * 1. Creates the user with default role/department
+   * 2. Writes an audit log *owned by the new user* (avoids FK failures)
+   * 3. Returns `{ user, token }` ready for the client
+   */
+  async registerAndLogin(data: RegisterUserData & { ipAddress?: string; userAgent?: string }): Promise<LoginResult> {
+    // 1️⃣  Ensure e-mail is unique
+    if (await getUserByEmail(data.email)) {
+      throw new ConflictError("User with this email already exists")
+    }
+
+    // 2️⃣  Persist the new user
+    const hashedPassword = await bcrypt.hash(data.password, 12)
+    const newUser = await dbCreateUser({
+      ...data,
+      password: hashedPassword,
+    })
+
+    // 3️⃣  Audit log recorded *by* the new user
+    await createAuditLog({
+      user_id: newUser.id,
+      action: "USER_SELF_REGISTERED",
+      details: { email: newUser.email, role: newUser.role },
+      ip_address: data.ipAddress,
+      user_agent: data.userAgent,
+    })
+
+    // 4️⃣  Generate auth token
+    const token = generateToken(newUser.id)
+    // Strip password field
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _pw, ...userWithoutPassword } = newUser
+
+    return { user: userWithoutPassword, token }
   }
 }
 

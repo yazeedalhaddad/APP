@@ -1,35 +1,27 @@
 import type { NextRequest } from "next/server"
-import { userService } from "@/lib/services/user-service"
 import { withErrorHandler } from "@/lib/middleware/error-handler"
-import { validateRequest } from "@/lib/middleware/validation"
-import { signupSchema } from "@/lib/validation/schemas"
 import { ApiResponseBuilder } from "@/lib/utils/api-response"
+import { signupSchema } from "@/lib/validation/schemas"
+import { userService } from "@/lib/services/user-service"
 
-export const POST = withErrorHandler(async (request: NextRequest) => {
-  const body = await validateRequest(request, signupSchema)
+export const POST = withErrorHandler(async (req: NextRequest) => {
+  // Validate and strip confirmPassword
+  const { name, email, password } = signupSchema.parse(await req.json())
 
-  const { name, email, password } = body
+  // Meta for audit
+  const ipAddress = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? undefined
+  const userAgent = req.headers.get("user-agent") ?? undefined
 
-  // Get client IP and user agent for audit logging
-  const ipAddress = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
-  const userAgent = request.headers.get("user-agent") || "unknown"
-
-  // Create user with default role and department
-  const result = await userService.createUser(
-    {
-      name,
-      email,
-      password,
-      role: "lab", // Default role for new signups
-      department: "General", // Default department
-    },
-    "system", // Created by system for self-registration
+  // Create account and auto-login
+  const { user, token } = await userService.registerAndLogin({
+    name,
+    email,
+    password,
+    role: "lab",
+    department: "General",
     ipAddress,
     userAgent,
-  )
+  })
 
-  // Auto-login the user after successful signup
-  const loginResult = await userService.login({ email, password }, ipAddress, userAgent)
-
-  return ApiResponseBuilder.success(loginResult, "Account created successfully")
+  return ApiResponseBuilder.success({ user, token }, "Account created")
 })

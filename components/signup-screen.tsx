@@ -10,12 +10,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Building2, ArrowLeft } from "lucide-react"
 import { useAppStore } from "@/stores/app-store"
+import { useRouter } from "next/navigation"
 
 interface SignupScreenProps {
   onBackToLogin: () => void
 }
 
 export function SignupScreen({ onBackToLogin }: SignupScreenProps) {
+  const router = useRouter() // Moved useRouter hook to the top level
   const { isLoading, error, clearError } = useAppStore()
   const [formData, setFormData] = useState({
     name: "",
@@ -78,24 +80,19 @@ export function SignupScreen({ onBackToLogin }: SignupScreenProps) {
         }),
       })
 
-      const result = await response.json()
+      const isJson = response.headers.get("content-type")?.toLowerCase().includes("application/json") ?? false
+
+      const result = isJson ? await response.json() : undefined
 
       if (!response.ok) {
-        throw new Error(result.error || "Sign up failed")
+        const errMsg = (isJson && result?.error) || (await response.text()) || "Sign up failed"
+        throw new Error(errMsg)
       }
 
       const { user, token } = result.data
 
-      // Store token and update auth state
-      if (typeof window !== "undefined") {
-        localStorage.setItem("auth_token", token)
-      }
-
-      useAppStore.setState({
-        user,
-        token,
-        isAuthenticated: true,
-      })
+      useAppStore.setState({ user, token, isAuthenticated: true })
+      router.push("/dashboard")
     } catch (error) {
       console.error("Signup error:", error)
       useAppStore.setState({

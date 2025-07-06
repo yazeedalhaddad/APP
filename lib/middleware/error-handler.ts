@@ -1,10 +1,21 @@
-import type { NextResponse } from "next/server"
-import { AppError } from "@/lib/utils/errors"
+import type { NextRequest, NextResponse } from "next/server"
 import { ApiResponseBuilder } from "@/lib/utils/api-response"
+import { AppError } from "@/lib/utils/errors"
+
+/**
+ * Convert any thrown value into a well-formed JSON API response.
+ * Always export BOTH helpers expected elsewhere (`handleApiError` +
+ * `withErrorHandler`).
+ */
+
+/* -------------------------------------------------------------------------- */
+/*                             Core Conversion                                */
+/* -------------------------------------------------------------------------- */
 
 export function handleApiError(error: unknown): NextResponse {
   console.error("API Error:", error)
 
+  // Known application error with explicit status code
   if (error instanceof AppError) {
     switch (error.statusCode) {
       case 400:
@@ -18,27 +29,31 @@ export function handleApiError(error: unknown): NextResponse {
       case 409:
         return ApiResponseBuilder.conflict(error.message)
       default:
-        return ApiResponseBuilder.internalServerError(error.message)
+        return ApiResponseBuilder.custom(error.statusCode, error.message)
     }
   }
 
-  // Handle database connection errors
+  // Database-style connection issues
   if (error instanceof Error) {
     if (error.message.includes("DATABASE_URL") || error.message.includes("connection")) {
       return ApiResponseBuilder.internalServerError("Database connection failed. Please check your configuration.")
     }
   }
 
-  // Handle unexpected errors
-  return ApiResponseBuilder.internalServerError("An unexpected error occurred")
+  // Fallback
+  return ApiResponseBuilder.internalServerError(error instanceof Error ? error.message : "Internal server error")
 }
 
-export function withErrorHandler<T extends any[]>(handler: (...args: T) => Promise<NextResponse>) {
-  return async (...args: T): Promise<NextResponse> => {
+/* -------------------------------------------------------------------------- */
+/*                              Wrapper Utility                               */
+/* -------------------------------------------------------------------------- */
+
+export function withErrorHandler<T extends (req: NextRequest, ...args: any[]) => Promise<NextResponse>>(handler: T) {
+  return async (req: NextRequest, ...rest: Parameters<T>[1][]): Promise<NextResponse> => {
     try {
-      return await handler(...args)
-    } catch (error) {
-      return handleApiError(error)
+      return await handler(req, ...rest)
+    } catch (err) {
+      return handleApiError(err)
     }
   }
 }
